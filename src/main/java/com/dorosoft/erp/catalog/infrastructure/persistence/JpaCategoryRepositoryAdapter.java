@@ -34,7 +34,14 @@ public class JpaCategoryRepositoryAdapter implements CategoryRepository {
     public Category save(Category category) {
         CategoryEntity entity = jpaRepository.findById(category.categoryId()).orElse(null);
         if (entity == null) {
-            entity = new CategoryEntity(category.categoryId(), category.catalogId(), category.name(), category.displayOrder());
+            entity =
+                    new CategoryEntity(
+                            category.categoryId(),
+                            category.catalogId(),
+                            category.name(),
+                            category.displayOrder(),
+                            category.idempotencyKey(),
+                            category.idempotencyRequestHash());
         } else {
             if (entity.getVersion() != category.version()) {
                 throw new OptimisticLockingFailureException(
@@ -73,6 +80,11 @@ public class JpaCategoryRepositoryAdapter implements CategoryRepository {
         jpaRepository.flush();
     }
 
+    @Override
+    public Optional<Category> findByIdempotencyKey(String idempotencyKey) {
+        return jpaRepository.findByIdempotencyKey(idempotencyKey).map(JpaCategoryRepositoryAdapter::toDomain);
+    }
+
     private static Category toDomain(CategoryEntity entity) {
         return new Category(
                 entity.getCategoryId(),
@@ -81,6 +93,8 @@ public class JpaCategoryRepositoryAdapter implements CategoryRepository {
                 entity.getDisplayOrder(),
                 entity.getVersion(),
                 entity.getCreatedAt(),
-                entity.getUpdatedAt());
+                entity.getUpdatedAt(),
+                entity.getIdempotencyKey(),
+                entity.getIdempotencyRequestHash());
     }
 }

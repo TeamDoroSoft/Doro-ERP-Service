@@ -27,6 +27,12 @@ class CategoryEntity {
     @Column(name = "display_order", nullable = false)
     private int displayOrder;
 
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "idempotency_request_hash", length = 64)
+    private String idempotencyRequestHash;
+
     @Version
     @Column(name = "version", nullable = false)
     private long version;
@@ -41,11 +47,14 @@ class CategoryEntity {
 
     protected CategoryEntity() {}
 
-    CategoryEntity(UUID categoryId, UUID catalogId, String name, int displayOrder) {
+    CategoryEntity(
+            UUID categoryId, UUID catalogId, String name, int displayOrder, String idempotencyKey, String idempotencyRequestHash) {
         this.categoryId = categoryId;
         this.catalogId = catalogId;
         this.name = name;
         this.displayOrder = displayOrder;
+        this.idempotencyKey = idempotencyKey;
+        this.idempotencyRequestHash = idempotencyRequestHash;
     }
 
     UUID getCategoryId() {
@@ -74,6 +83,14 @@ class CategoryEntity {
 
     Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    String getIdempotencyRequestHash() {
+        return idempotencyRequestHash;
     }
 
     void rename(String name) {

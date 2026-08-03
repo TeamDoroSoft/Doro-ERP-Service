@@ -6,7 +6,15 @@ import java.util.UUID;
 
 /** 카테고리명과 Catalog 안의 표시 순서(FR-MENU-003). 순서는 정렬 전체 교체 Use Case에서만 바뀐다. */
 public record Category(
-        UUID categoryId, UUID catalogId, String name, int displayOrder, long version, Instant createdAt, Instant updatedAt) {
+        UUID categoryId,
+        UUID catalogId,
+        String name,
+        int displayOrder,
+        long version,
+        Instant createdAt,
+        Instant updatedAt,
+        String idempotencyKey,
+        String idempotencyRequestHash) {
 
     private static final int NAME_MAX_LENGTH = 60;
 
@@ -21,13 +29,21 @@ public record Category(
         Objects.requireNonNull(updatedAt, "updatedAt은 필수다");
     }
 
-    public static Category create(UUID categoryId, UUID catalogId, String name, int displayOrder, Instant now) {
-        return new Category(categoryId, catalogId, name, displayOrder, 0L, now, now);
+    public static Category create(
+            UUID categoryId,
+            UUID catalogId,
+            String name,
+            int displayOrder,
+            Instant now,
+            String idempotencyKey,
+            String idempotencyRequestHash) {
+        return new Category(categoryId, catalogId, name, displayOrder, 0L, now, now, idempotencyKey, idempotencyRequestHash);
     }
 
     /** 이름만 바꾼다. version은 매개변수로 받은 값(호출자가 확인한 최신값)을 그대로 유지한다. */
     public Category rename(String newName) {
-        return new Category(categoryId, catalogId, newName, displayOrder, version, createdAt, updatedAt);
+        return new Category(
+                categoryId, catalogId, newName, displayOrder, version, createdAt, updatedAt, idempotencyKey, idempotencyRequestHash);
     }
 
     private static String requireValidName(String name) {

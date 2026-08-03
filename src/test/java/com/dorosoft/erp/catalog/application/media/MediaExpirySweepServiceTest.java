@@ -36,7 +36,8 @@ class MediaExpirySweepServiceTest {
         UUID mediaId = UUID.randomUUID();
         ProductMedia media =
                 ProductMedia.stage(
-                        mediaId, CATALOG_ID, "staging/" + mediaId, MediaContentType.WEBP, 1024, CHECKSUM, CREATED_BY, createdAt);
+                        mediaId, CATALOG_ID, "staging/" + mediaId, MediaContentType.WEBP, 1024, CHECKSUM, CREATED_BY, createdAt,
+                        null, null);
         mediaRepository.save(media);
         storage.seedStagingObject(mediaId, MediaContentType.WEBP, 1024, CHECKSUM);
         return media;

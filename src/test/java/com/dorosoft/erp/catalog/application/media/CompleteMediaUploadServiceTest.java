@@ -44,7 +44,8 @@ class CompleteMediaUploadServiceTest {
         UUID mediaId = UUID.randomUUID();
         ProductMedia media =
                 ProductMedia.stage(
-                        mediaId, CATALOG_ID, "staging/" + mediaId, CONTENT_TYPE, BYTE_SIZE, CHECKSUM, CREATED_BY, createdAt);
+                        mediaId, CATALOG_ID, "staging/" + mediaId, CONTENT_TYPE, BYTE_SIZE, CHECKSUM, CREATED_BY, createdAt,
+                        null, null);
         mediaRepository.save(media);
         return media;
     }

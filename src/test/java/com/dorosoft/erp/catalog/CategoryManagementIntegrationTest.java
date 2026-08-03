@@ -14,6 +14,7 @@ import com.dorosoft.erp.catalog.application.port.ProductOrderRepository;
 import com.dorosoft.erp.catalog.domain.category.Category;
 import com.dorosoft.erp.catalog.domain.category.CategoryNotFoundException;
 import com.dorosoft.erp.catalog.domain.category.InvalidDisplayOrderException;
+import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyKeyReusedException;
 import com.dorosoft.erp.catalog.domain.revision.CatalogRevision;
 import java.util.List;
 import java.util.UUID;
@@ -53,9 +54,9 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("생성한 Category는 순서대로 마지막 displayOrder를 받는다")
     void createsAppendAtEnd() {
-        Category first = createCategoryService.create("커피");
-        Category second = createCategoryService.create("차");
-        Category third = createCategoryService.create("디저트");
+        Category first = createCategoryService.create("커피", null);
+        Category second = createCategoryService.create("차", null);
+        Category third = createCategoryService.create("디저트", null);
 
         assertThat(first.displayOrder()).isZero();
         assertThat(second.displayOrder()).isEqualTo(1);
@@ -63,12 +64,35 @@ class CategoryManagementIntegrationTest {
         assertThat(categoryRepository.findAll()).hasSize(3);
     }
 
+    // --- 생성 멱등성 ---------------------------------------------------------
+
+    @Test
+    @DisplayName("같은 Idempotency-Key와 같은 내용의 재요청은 기존 결과를 그대로 반환한다")
+    void idempotentRetryWithSameNameReturnsExistingCategory() {
+        String key = "idem-category-1";
+        Category first = createCategoryService.create("커피", key);
+
+        Category retried = createCategoryService.create("커피", key);
+
+        assertThat(retried.categoryId()).isEqualTo(first.categoryId());
+        assertThat(categoryRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("같은 Idempotency-Key를 다른 내용으로 재요청하면 IdempotencyKeyReusedException")
+    void idempotentRetryWithDifferentNameFails() {
+        String key = "idem-category-2";
+        createCategoryService.create("커피", key);
+
+        assertThatThrownBy(() -> createCategoryService.create("차", key)).isInstanceOf(IdempotencyKeyReusedException.class);
+    }
+
     // --- 이름 변경 ---------------------------------------------------------
 
     @Test
     @DisplayName("이름을 바꾸면 version이 오르고 displayOrder는 그대로다")
     void renameUpdatesNameAndBumpsVersion() {
-        Category created = createCategoryService.create("커피");
+        Category created = createCategoryService.create("커피", null);
 
         Category renamed = updateCategoryService.rename(created.categoryId(), "커피·에스프레소", created.version());
 
@@ -80,7 +104,7 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("낡은 version으로 이름을 바꾸면 OptimisticLockingFailureException")
     void renameWithStaleVersionFails() {
-        Category created = createCategoryService.create("커피");
+        Category created = createCategoryService.create("커피", null);
         updateCategoryService.rename(created.categoryId(), "1차 수정", created.version());
 
         assertThatThrownBy(() -> updateCategoryService.rename(created.categoryId(), "뒤늦은 수정", created.version()))
@@ -99,9 +123,9 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("Category 전체 순서를 교체하면 요청 배열 순서대로 0부터 재배정되고 Catalog Revision이 오른다")
     void replaceCategoryOrderSucceeds() {
-        Category coffee = createCategoryService.create("커피");
-        Category tea = createCategoryService.create("차");
-        Category dessert = createCategoryService.create("디저트");
+        Category coffee = createCategoryService.create("커피", null);
+        Category tea = createCategoryService.create("차", null);
+        Category dessert = createCategoryService.create("디저트", null);
         CatalogRevision before = currentRevision();
 
         CatalogRevision after =
@@ -118,8 +142,8 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("Category 정렬 요청에 ID가 누락되면 거부되고 기존 순서를 유지한다")
     void replaceCategoryOrderWithMissingIdFails() {
-        Category coffee = createCategoryService.create("커피");
-        Category tea = createCategoryService.create("차");
+        Category coffee = createCategoryService.create("커피", null);
+        Category tea = createCategoryService.create("차", null);
         CatalogRevision before = currentRevision();
 
         assertThatThrownBy(() -> replaceCategoryOrderService.replaceOrder(List.of(coffee.categoryId()), before.revision()))
@@ -133,8 +157,8 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("Category 정렬 요청에 ID가 중복되면 거부된다")
     void replaceCategoryOrderWithDuplicateIdFails() {
-        Category coffee = createCategoryService.create("커피");
-        createCategoryService.create("차");
+        Category coffee = createCategoryService.create("커피", null);
+        createCategoryService.create("차", null);
         CatalogRevision before = currentRevision();
 
         assertThatThrownBy(
@@ -147,8 +171,8 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("낡은 Catalog Revision으로 정렬을 요청하면 OptimisticLockingFailureException이고 순서는 그대로다")
     void replaceCategoryOrderWithStaleRevisionFails() {
-        Category coffee = createCategoryService.create("커피");
-        Category tea = createCategoryService.create("차");
+        Category coffee = createCategoryService.create("커피", null);
+        Category tea = createCategoryService.create("차", null);
         long staleRevision = currentRevision().revision();
         replaceCategoryOrderService.replaceOrder(List.of(tea.categoryId(), coffee.categoryId()), staleRevision);
 
@@ -166,7 +190,7 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("Category 안의 Product 순서를 교체하면 요청 순서대로 재배정되고 Catalog Revision이 오른다")
     void replaceProductOrderSucceeds() {
-        Category category = createCategoryService.create("커피");
+        Category category = createCategoryService.create("커피", null);
         UUID americano = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, category.categoryId(), "아메리카노", 4500L, 0);
         UUID latte = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, category.categoryId(), "카페라떼", 5000L, 1);
         UUID mocha = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, category.categoryId(), "카페모카", 5500L, 2);
@@ -184,8 +208,8 @@ class CategoryManagementIntegrationTest {
     @Test
     @DisplayName("다른 Category 소속 Product가 섞이면 정렬을 거부한다")
     void replaceProductOrderWithForeignCategoryProductFails() {
-        Category coffee = createCategoryService.create("커피");
-        Category tea = createCategoryService.create("차");
+        Category coffee = createCategoryService.create("커피", null);
+        Category tea = createCategoryService.create("차", null);
         UUID americano = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, coffee.categoryId(), "아메리카노", 4500L, 0);
         UUID greenTea = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, tea.categoryId(), "녹차", 4000L, 0);
         CatalogRevision before = currentRevision();

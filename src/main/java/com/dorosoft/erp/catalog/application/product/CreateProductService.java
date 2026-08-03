@@ -5,12 +5,12 @@ import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.ProductMediaRepository;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
 import com.dorosoft.erp.catalog.domain.category.CategoryNotFoundException;
+import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyKeyReusedException;
+import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyRequestHash;
 import com.dorosoft.erp.catalog.domain.media.MediaNotFoundException;
 import com.dorosoft.erp.catalog.domain.media.ProductMedia;
-import com.dorosoft.erp.catalog.domain.product.IdempotencyKeyReusedException;
 import com.dorosoft.erp.catalog.domain.product.MediaNotReadyException;
 import com.dorosoft.erp.catalog.domain.product.Product;
-import com.dorosoft.erp.catalog.domain.product.ProductCreationRequestHash;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -39,7 +39,7 @@ public class CreateProductService {
     @Transactional
     public Product create(CreateProductCommand command) {
         String requestHash =
-                ProductCreationRequestHash.of(
+                IdempotencyRequestHash.of(
                         command.categoryId(),
                         command.name(),
                         command.description(),

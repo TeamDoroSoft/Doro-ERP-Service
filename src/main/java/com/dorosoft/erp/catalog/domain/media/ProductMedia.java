@@ -22,7 +22,9 @@ public record ProductMedia(
         UUID createdBy,
         Instant uploadExpiresAt,
         Instant createdAt,
-        Instant readyAt) {
+        Instant readyAt,
+        String idempotencyKey,
+        String idempotencyRequestHash) {
 
     /** 서버가 생성한 Staging Presigned PUT URL의 유효 기간(ADR-007). */
     public static final Duration PRESIGNED_UPLOAD_TTL = Duration.ofMinutes(5);
@@ -60,7 +62,9 @@ public record ProductMedia(
             long byteSize,
             String checksumSha256,
             UUID createdBy,
-            Instant createdAt) {
+            Instant createdAt,
+            String idempotencyKey,
+            String idempotencyRequestHash) {
         return new ProductMedia(
                 mediaId,
                 catalogId,
@@ -74,7 +78,9 @@ public record ProductMedia(
                 createdBy,
                 createdAt.plus(PRESIGNED_UPLOAD_TTL),
                 createdAt,
-                null);
+                null,
+                idempotencyKey,
+                idempotencyRequestHash);
     }
 
     /** byteSize가 0 미만이거나 MAX_BYTE_SIZE를 넘으면 거부한다. Media Row를 만들기 전에도 호출할 수 있다. */
@@ -120,7 +126,9 @@ public record ProductMedia(
                 createdBy,
                 uploadExpiresAt,
                 createdAt,
-                null);
+                null,
+                idempotencyKey,
+                idempotencyRequestHash);
     }
 
     /** 조건부 Public 승격이 성공(또는 이전 성공을 복구)했을 때 READY로 전환한다. */
@@ -142,7 +150,9 @@ public record ProductMedia(
                 createdBy,
                 uploadExpiresAt,
                 createdAt,
-                readyAt);
+                readyAt,
+                idempotencyKey,
+                idempotencyRequestHash);
     }
 
     private void requirePending(String action) {

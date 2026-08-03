@@ -11,7 +11,7 @@ import com.dorosoft.erp.catalog.application.product.ReplaceProductOptionsService
 import com.dorosoft.erp.catalog.application.product.UpdateProductService;
 import com.dorosoft.erp.catalog.domain.category.CategoryNotFoundException;
 import com.dorosoft.erp.catalog.domain.media.MediaNotFoundException;
-import com.dorosoft.erp.catalog.domain.product.IdempotencyKeyReusedException;
+import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyKeyReusedException;
 import com.dorosoft.erp.catalog.domain.product.InvalidPriceException;
 import com.dorosoft.erp.catalog.domain.product.InvalidProductOptionsException;
 import com.dorosoft.erp.catalog.domain.product.MediaNotReadyException;

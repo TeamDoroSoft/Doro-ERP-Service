@@ -52,7 +52,9 @@ class ProductMediaPersistenceIntegrationTest {
                 1024,
                 CHECKSUM,
                 UUID.randomUUID(),
-                createdAt);
+                createdAt,
+                null,
+                null);
     }
 
     @Test
@@ -102,6 +104,33 @@ class ProductMediaPersistenceIntegrationTest {
         assertThat(reloaded.objectEtag()).isEqualTo("etag-1");
         assertThat(reloaded.stagingObjectKey()).isEqualTo(media.stagingObjectKey());
         assertThat(reloaded.checksumSha256()).isEqualTo(CHECKSUM);
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key로 저장한 Media를 다시 조회할 수 있다")
+    void savesAndFindsByIdempotencyKey() {
+        UUID mediaId = UUID.randomUUID();
+        ProductMedia media =
+                ProductMedia.stage(
+                        mediaId,
+                        catalogId,
+                        "tenants/t/catalog/staging/" + mediaId + "/source",
+                        MediaContentType.WEBP,
+                        1024,
+                        CHECKSUM,
+                        UUID.randomUUID(),
+                        Instant.now(),
+                        "idem-media-persistence",
+                        "hash-value");
+
+        inTransaction(() -> repository.save(media));
+
+        Optional<ProductMedia> found = inTransaction(() -> repository.findByIdempotencyKey("idem-media-persistence"));
+
+        assertThat(found).isPresent();
+        assertThat(found.orElseThrow().mediaId()).isEqualTo(mediaId);
+        assertThat(found.orElseThrow().idempotencyRequestHash()).isEqualTo("hash-value");
+        assertThat(inTransaction(() -> repository.findByIdempotencyKey("no-such-key"))).isEmpty();
     }
 
     @Test

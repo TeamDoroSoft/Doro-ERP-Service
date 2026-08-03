@@ -20,4 +20,6 @@ interface ProductMediaJpaRepository extends JpaRepository<ProductMediaEntity, UU
 
     List<ProductMediaEntity> findByStatusAndCreatedAtLessThanEqualOrderByCreatedAtAsc(
             MediaStatus status, Instant threshold, Pageable pageable);
+
+    Optional<ProductMediaEntity> findByIdempotencyKey(String idempotencyKey);
 }

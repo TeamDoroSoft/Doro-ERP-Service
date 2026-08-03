@@ -17,4 +17,7 @@ public interface ProductMediaRepository {
 
     /** 생성 후 PENDING_EXPIRY가 지난 PENDING Media를 정리 대상 순서로 반환한다(만료 정리 Job 전용). */
     List<ProductMedia> findExpiredPending(Instant threshold, int limit);
+
+    /** 이전에 사용된 Idempotency-Key라면 그 결과 Media를 반환한다(생성 API 공통 계약). */
+    Optional<ProductMedia> findByIdempotencyKey(String idempotencyKey);
 }

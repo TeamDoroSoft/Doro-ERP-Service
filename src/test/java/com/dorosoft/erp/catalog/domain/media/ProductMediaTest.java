@@ -21,7 +21,7 @@ class ProductMediaTest {
     private static ProductMedia staged(Instant createdAt) {
         return ProductMedia.stage(
                 MEDIA_ID, CATALOG_ID, "tenants/t/catalog/staging/" + MEDIA_ID + "/source",
-                MediaContentType.WEBP, 1024, CHECKSUM, CREATED_BY, createdAt);
+                MediaContentType.WEBP, 1024, CHECKSUM, CREATED_BY, createdAt, null, null);
     }
 
     @Nested
@@ -49,7 +49,7 @@ class ProductMediaTest {
                             () ->
                                     ProductMedia.stage(
                                             MEDIA_ID, CATALOG_ID, "key", MediaContentType.WEBP,
-                                            ProductMedia.MAX_BYTE_SIZE + 1, CHECKSUM, CREATED_BY, Instant.now()))
+                                            ProductMedia.MAX_BYTE_SIZE + 1, CHECKSUM, CREATED_BY, Instant.now(), null, null))
                     .isInstanceOf(IllegalArgumentException.class);
         }
 
@@ -60,7 +60,7 @@ class ProductMediaTest {
                             () ->
                                     ProductMedia.stage(
                                             MEDIA_ID, CATALOG_ID, "key", MediaContentType.WEBP,
-                                            -1, CHECKSUM, CREATED_BY, Instant.now()))
+                                            -1, CHECKSUM, CREATED_BY, Instant.now(), null, null))
                     .isInstanceOf(IllegalArgumentException.class);
         }
     }

@@ -40,4 +40,9 @@ class FakeProductMediaRepository implements ProductMediaRepository {
                 .limit(limit)
                 .toList();
     }
+
+    @Override
+    public Optional<ProductMedia> findByIdempotencyKey(String idempotencyKey) {
+        return store.values().stream().filter(media -> idempotencyKey.equals(media.idempotencyKey())).findFirst();
+    }
 }

@@ -51,6 +51,11 @@ public class JpaProductMediaRepositoryAdapter implements ProductMediaRepository 
                 .toList();
     }
 
+    @Override
+    public Optional<ProductMedia> findByIdempotencyKey(String idempotencyKey) {
+        return jpaRepository.findByIdempotencyKey(idempotencyKey).map(JpaProductMediaRepositoryAdapter::toDomain);
+    }
+
     private static ProductMediaEntity toEntity(ProductMedia media) {
         return new ProductMediaEntity(
                 media.mediaId(),
@@ -65,7 +70,9 @@ public class JpaProductMediaRepositoryAdapter implements ProductMediaRepository 
                 media.createdBy(),
                 media.uploadExpiresAt(),
                 media.createdAt(),
-                media.readyAt());
+                media.readyAt(),
+                media.idempotencyKey(),
+                media.idempotencyRequestHash());
     }
 
     private static ProductMedia toDomain(ProductMediaEntity entity) {
@@ -88,6 +95,8 @@ public class JpaProductMediaRepositoryAdapter implements ProductMediaRepository 
                 entity.getCreatedBy(),
                 entity.getUploadExpiresAt(),
                 entity.getCreatedAt(),
-                entity.getReadyAt());
+                entity.getReadyAt(),
+                entity.getIdempotencyKey(),
+                entity.getIdempotencyRequestHash());
     }
 }

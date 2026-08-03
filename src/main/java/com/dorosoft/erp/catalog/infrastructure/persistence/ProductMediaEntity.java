@@ -37,6 +37,12 @@ class ProductMediaEntity {
     @Column(name = "checksum_sha256", nullable = false, length = 44)
     private String checksumSha256;
 
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "idempotency_request_hash", length = 64)
+    private String idempotencyRequestHash;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private MediaStatus status;
@@ -74,7 +80,9 @@ class ProductMediaEntity {
             UUID createdBy,
             Instant uploadExpiresAt,
             Instant createdAt,
-            Instant readyAt) {
+            Instant readyAt,
+            String idempotencyKey,
+            String idempotencyRequestHash) {
         this.mediaId = mediaId;
         this.catalogId = catalogId;
         this.stagingObjectKey = stagingObjectKey;
@@ -88,6 +96,8 @@ class ProductMediaEntity {
         this.uploadExpiresAt = uploadExpiresAt;
         this.createdAt = createdAt;
         this.readyAt = readyAt;
+        this.idempotencyKey = idempotencyKey;
+        this.idempotencyRequestHash = idempotencyRequestHash;
     }
 
     /** 상태 전이 결과(READY·REJECTED)를 그대로 반영한다. staging/checksum/생성 정보는 바뀌지 않는다. */
@@ -148,5 +158,13 @@ class ProductMediaEntity {
 
     Instant getReadyAt() {
         return readyAt;
+    }
+
+    String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    String getIdempotencyRequestHash() {
+        return idempotencyRequestHash;
     }
 }

@@ -15,5 +15,13 @@ public interface CatalogRevisionRepository {
      */
     CatalogRevision save(CatalogRevision revision);
 
+    /**
+     * 낙관적 잠금 비교 없이 Catalog Revision을 원자적으로 1 증가시킨다. 정렬처럼 Catalog Revision
+     * 자체를 동시성 기준으로 쓰는 Use Case가 아니라, Category·Product의 다른 모든 변경이 공개 메뉴
+     * ETag(Catalog Revision) 갱신을 위해 부수 효과로 호출한다. 여러 변경이 동시에 이 값을 올려도
+     * 서로를 거짓 충돌로 실패시키지 않도록 DB 레벨 증가 연산을 쓴다.
+     */
+    CatalogRevision advance();
+
     boolean exists();
 }

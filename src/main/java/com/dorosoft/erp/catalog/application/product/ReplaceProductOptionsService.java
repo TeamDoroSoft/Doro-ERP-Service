@@ -1,6 +1,7 @@
 package com.dorosoft.erp.catalog.application.product;
 
 import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
+import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
 import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
@@ -25,10 +26,13 @@ public class ReplaceProductOptionsService {
     private static final String VALUE_SCHEMA_VERSION = "v1";
 
     private final ProductRepository productRepository;
+    private final CatalogRevisionRepository catalogRevisionRepository;
     private final AuditWriter auditWriter;
 
-    public ReplaceProductOptionsService(ProductRepository productRepository, AuditWriter auditWriter) {
+    public ReplaceProductOptionsService(
+            ProductRepository productRepository, CatalogRevisionRepository catalogRevisionRepository, AuditWriter auditWriter) {
         this.productRepository = productRepository;
+        this.catalogRevisionRepository = catalogRevisionRepository;
         this.auditWriter = auditWriter;
     }
 
@@ -42,6 +46,7 @@ public class ReplaceProductOptionsService {
                             + ", 현재 version=" + current.version());
         }
         Product saved = productRepository.save(current.replaceOptions(options));
+        catalogRevisionRepository.advance();
 
         auditWriter.record(
                 new AuditRecordCommand(

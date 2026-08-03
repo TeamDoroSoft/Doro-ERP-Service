@@ -7,6 +7,7 @@ import com.dorosoft.erp.catalog.application.category.CreateCategoryService;
 import com.dorosoft.erp.catalog.application.category.ReplaceCategoryOrderService;
 import com.dorosoft.erp.catalog.application.category.ReplaceProductOrderInCategoryService;
 import com.dorosoft.erp.catalog.application.category.UpdateCategoryService;
+import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
 import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
@@ -59,6 +60,7 @@ class CatalogAuditIntegrationTest {
     @Autowired private ChangeProductSalesPolicyService changeProductSalesPolicyService;
     @Autowired private ChangeSoldOutService changeSoldOutService;
     @Autowired private FakeAuditWriter fakeAuditWriter;
+    @Autowired private CatalogRevisionRepository catalogRevisionRepository;
     @Autowired private JdbcClient jdbcClient;
 
     private UUID catalogId;
@@ -104,8 +106,9 @@ class CatalogAuditIntegrationTest {
         Category coffee = createCategoryService.create("커피", null, auditContext);
         Category tea = createCategoryService.create("차", null, auditContext);
         fakeAuditWriter.recorded.clear();
+        long currentRevision = catalogRevisionRepository.findCurrent().orElseThrow().revision();
 
-        replaceCategoryOrderService.replaceOrder(List.of(tea.categoryId(), coffee.categoryId()), 0L, auditContext);
+        replaceCategoryOrderService.replaceOrder(List.of(tea.categoryId(), coffee.categoryId()), currentRevision, auditContext);
 
         AuditRecordCommand command = fakeAuditWriter.last("CATEGORY_ORDER_CHANGED");
         assertThat(command.primaryTarget().targetId()).isEqualTo(tea.categoryId().toString());
@@ -121,9 +124,10 @@ class CatalogAuditIntegrationTest {
         Product americano = createProductService.create(basicCommand(category.categoryId(), "아메리카노"), auditContext);
         Product latte = createProductService.create(basicCommand(category.categoryId(), "카페라떼"), auditContext);
         fakeAuditWriter.recorded.clear();
+        long currentRevision = catalogRevisionRepository.findCurrent().orElseThrow().revision();
 
         replaceProductOrderInCategoryService.replaceOrder(
-                category.categoryId(), List.of(latte.productId(), americano.productId()), 0L, auditContext);
+                category.categoryId(), List.of(latte.productId(), americano.productId()), currentRevision, auditContext);
 
         AuditRecordCommand command = fakeAuditWriter.last("PRODUCT_ORDER_CHANGED");
         Map<String, Object> after = readJson(command.afterValue());

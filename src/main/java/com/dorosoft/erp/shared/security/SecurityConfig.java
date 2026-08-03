@@ -30,6 +30,8 @@ public class SecurityConfig {
                 .hasAuthority("store.settings.read")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/v1/store-settings/profile")
                 .hasAuthority("store.settings.update")
+                .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/v1/store-settings/schedule")
+                .hasAuthority("store.settings.update")
                 .anyRequest()
                 .permitAll());
         http.exceptionHandling(exceptions -> exceptions

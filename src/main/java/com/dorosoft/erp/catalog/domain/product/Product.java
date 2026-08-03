@@ -1,12 +1,16 @@
 package com.dorosoft.erp.catalog.domain.product;
 
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityReason;
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityRejectedException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 상품 기본 정보, 가격, 대표 이미지 참조와 옵션을 포함하는 Aggregate(FR-MENU-001, 002, 004).
@@ -118,7 +122,7 @@ public record Product(
      * 존재하지 않는 ID, 중복 ID는 거부한다. 배열 순서대로 displayOrder를 부여한다.
      */
     public Product replaceOptions(List<ProductOptionRequest> requested) {
-        Set<UUID> existingIds = options.stream().map(ProductOption::optionId).collect(java.util.stream.Collectors.toSet());
+        Set<UUID> existingIds = options.stream().map(ProductOption::optionId).collect(Collectors.toSet());
 
         List<UUID> requestedExistingIds =
                 requested.stream().map(ProductOptionRequest::optionId).filter(Objects::nonNull).toList();
@@ -146,6 +150,40 @@ public record Product(
                 productId, catalogId, categoryId, mediaId, name, description, basePrice, imageAltText,
                 salesEnabled, soldOut, stockManaged, displayOrder, version, createdAt, updatedAt, newOptions,
                 idempotencyKey, idempotencyRequestHash);
+    }
+
+    /**
+     * 주문 항목 검증(판매 가능성 판정 명세)의 판정 순서를 그대로 구현한다: 판매 비활성 -> 수동 품절 ->
+     * 옵션 ID 중복 -> 옵션 미존재·다른 상품 소속 -> 옵션 비활성. 모두 통과하면 선택 순서를 보존한
+     * ProductOption 목록을 반환한다. 상품 자체가 없는 경우(PRODUCT_NOT_FOUND)는 이 메서드가 호출되기
+     * 전에 조회 단계에서 걸러진다.
+     */
+    public List<ProductOption> resolveOrderableOptions(List<UUID> selectedOptionIds) {
+        if (!salesEnabled) {
+            throw new OrderabilityRejectedException(OrderabilityReason.PRODUCT_NOT_FOR_SALE, productId);
+        }
+        if (soldOut) {
+            throw new OrderabilityRejectedException(OrderabilityReason.PRODUCT_SOLD_OUT, productId);
+        }
+
+        List<UUID> requested = selectedOptionIds == null ? List.of() : selectedOptionIds;
+        if (new HashSet<>(requested).size() != requested.size()) {
+            throw new OrderabilityRejectedException(OrderabilityReason.DUPLICATE_OPTION_SELECTION, productId);
+        }
+
+        Map<UUID, ProductOption> byId = options.stream().collect(Collectors.toMap(ProductOption::optionId, o -> o));
+        List<ProductOption> resolved = new ArrayList<>();
+        for (UUID optionId : requested) {
+            ProductOption option = byId.get(optionId);
+            if (option == null) {
+                throw new OrderabilityRejectedException(OrderabilityReason.OPTION_NOT_FOUND, productId);
+            }
+            if (!option.enabled()) {
+                throw new OrderabilityRejectedException(OrderabilityReason.OPTION_NOT_ORDERABLE, productId);
+            }
+            resolved.add(option);
+        }
+        return resolved;
     }
 
     private static String requireValidName(String name) {

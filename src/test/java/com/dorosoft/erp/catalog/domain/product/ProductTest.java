@@ -3,6 +3,8 @@ package com.dorosoft.erp.catalog.domain.product;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityReason;
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityRejectedException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -221,6 +223,105 @@ class ProductTest {
             assertThatThrownBy(
                             () -> product().replaceOptions(List.of(new ProductOptionRequest(null, "샷 추가", -500L, true))))
                     .isInstanceOf(InvalidPriceException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("resolveOrderableOptions(판매 가능성 판정 명세)")
+    class ResolveOrderableOptions {
+
+        @Test
+        @DisplayName("옵션을 선택하지 않아도 통과한다")
+        void allowsNoOptionSelection() {
+            List<ProductOption> resolved =
+                    product().resolveOrderableOptions(List.of());
+
+            assertThat(resolved).isEmpty();
+        }
+
+        @Test
+        @DisplayName("null 옵션 목록도 빈 선택으로 취급한다")
+        void treatsNullAsEmptySelection() {
+            assertThat(product().resolveOrderableOptions(null)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("판매 비활성 상품은 OrderabilityRejectedException(PRODUCT_NOT_FOR_SALE)")
+        void rejectsWhenNotForSale() {
+            Product notForSale = product().changeSalesPolicy(false, false);
+
+            assertThatThrownBy(() -> notForSale.resolveOrderableOptions(List.of()))
+                    .isInstanceOf(OrderabilityRejectedException.class)
+                    .extracting(e -> ((OrderabilityRejectedException) e).reason())
+                    .isEqualTo(OrderabilityReason.PRODUCT_NOT_FOR_SALE);
+        }
+
+        @Test
+        @DisplayName("수동 품절 상품은 OrderabilityRejectedException(PRODUCT_SOLD_OUT)")
+        void rejectsWhenSoldOut() {
+            Product soldOut = product().changeSoldOut(true);
+
+            assertThatThrownBy(() -> soldOut.resolveOrderableOptions(List.of()))
+                    .isInstanceOf(OrderabilityRejectedException.class)
+                    .extracting(e -> ((OrderabilityRejectedException) e).reason())
+                    .isEqualTo(OrderabilityReason.PRODUCT_SOLD_OUT);
+        }
+
+        @Test
+        @DisplayName("같은 옵션을 중복 선택하면 OrderabilityRejectedException(DUPLICATE_OPTION_SELECTION)")
+        void rejectsDuplicateSelection() {
+            Product withOption =
+                    product().replaceOptions(List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)));
+            UUID optionId = withOption.options().get(0).optionId();
+
+            assertThatThrownBy(() -> withOption.resolveOrderableOptions(List.of(optionId, optionId)))
+                    .isInstanceOf(OrderabilityRejectedException.class)
+                    .extracting(e -> ((OrderabilityRejectedException) e).reason())
+                    .isEqualTo(OrderabilityReason.DUPLICATE_OPTION_SELECTION);
+        }
+
+        @Test
+        @DisplayName("존재하지 않는(또는 다른 상품의) 옵션 ID는 OrderabilityRejectedException(OPTION_NOT_FOUND)")
+        void rejectsUnknownOption() {
+            Product withOption =
+                    product().replaceOptions(List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)));
+
+            assertThatThrownBy(() -> withOption.resolveOrderableOptions(List.of(UUID.randomUUID())))
+                    .isInstanceOf(OrderabilityRejectedException.class)
+                    .extracting(e -> ((OrderabilityRejectedException) e).reason())
+                    .isEqualTo(OrderabilityReason.OPTION_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("비활성 옵션을 선택하면 OrderabilityRejectedException(OPTION_NOT_ORDERABLE)")
+        void rejectsDisabledOption() {
+            Product withDisabledOption =
+                    product().replaceOptions(List.of(new ProductOptionRequest(null, "단종 옵션", 500L, false)));
+            UUID optionId = withDisabledOption.options().get(0).optionId();
+
+            assertThatThrownBy(() -> withDisabledOption.resolveOrderableOptions(List.of(optionId)))
+                    .isInstanceOf(OrderabilityRejectedException.class)
+                    .extracting(e -> ((OrderabilityRejectedException) e).reason())
+                    .isEqualTo(OrderabilityReason.OPTION_NOT_ORDERABLE);
+        }
+
+        @Test
+        @DisplayName("모두 통과하면 선택한 옵션을 요청 순서대로 반환한다")
+        void resolvesSelectedOptionsInRequestOrder() {
+            Product withOptions =
+                    product()
+                            .replaceOptions(
+                                    List.of(
+                                            new ProductOptionRequest(null, "샷 추가", 500L, true),
+                                            new ProductOptionRequest(null, "디카페인 변경", 700L, true)));
+            UUID shot = withOptions.options().get(0).optionId();
+            UUID decaf = withOptions.options().get(1).optionId();
+
+            List<ProductOption> resolved =
+                    withOptions.resolveOrderableOptions(List.of(decaf, shot));
+
+            assertThat(resolved).extracting(ProductOption::optionId)
+                    .containsExactly(decaf, shot);
         }
     }
 }

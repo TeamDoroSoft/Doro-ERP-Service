@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dorosoft.erp.TestcontainersConfiguration;
 import com.dorosoft.erp.catalog.application.api.StockManagementPolicyReader;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.product.ChangeProductSalesPolicyService;
 import com.dorosoft.erp.catalog.application.product.ChangeSoldOutService;
 import com.dorosoft.erp.catalog.application.product.CreateProductCommand;
@@ -33,17 +34,19 @@ class ProductSalesStateIntegrationTest {
     @Autowired private JdbcClient jdbcClient;
 
     private UUID categoryId;
+    private AuditContext auditContext;
 
     @BeforeEach
     void 테이블을_비우고_Category를_준비한다() {
         CatalogIntegrationSupport.cleanCatalogTables(jdbcClient);
         UUID catalogId = CatalogIntegrationSupport.insertCatalogRevision(jdbcClient);
         categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        auditContext = CatalogIntegrationSupport.testAuditContext();
     }
 
     private Product createProduct() {
         return createProductService.create(
-                new CreateProductCommand(categoryId, "아메리카노", null, 4500L, null, null, true, false, null));
+                new CreateProductCommand(categoryId, "아메리카노", null, 4500L, null, null, true, false, null), auditContext);
     }
 
     // --- 판매 활성화·재고 관리 여부 -------------------------------------------------
@@ -53,7 +56,8 @@ class ProductSalesStateIntegrationTest {
     void changeSalesPolicySucceeds() {
         Product created = createProduct();
 
-        Product updated = changeProductSalesPolicyService.changePolicy(created.productId(), false, true, created.version());
+        Product updated =
+                changeProductSalesPolicyService.changePolicy(created.productId(), false, true, created.version(), auditContext);
 
         assertThat(updated.salesEnabled()).isFalse();
         assertThat(updated.stockManaged()).isTrue();
@@ -67,7 +71,7 @@ class ProductSalesStateIntegrationTest {
 
         Product result =
                 changeProductSalesPolicyService.changePolicy(
-                        created.productId(), created.salesEnabled(), created.stockManaged(), created.version());
+                        created.productId(), created.salesEnabled(), created.stockManaged(), created.version(), auditContext);
 
         assertThat(result.version()).isEqualTo(created.version());
     }
@@ -76,16 +80,20 @@ class ProductSalesStateIntegrationTest {
     @DisplayName("낡은 version으로 정책을 바꾸면 OptimisticLockingFailureException")
     void changeSalesPolicyWithStaleVersionFails() {
         Product created = createProduct();
-        changeProductSalesPolicyService.changePolicy(created.productId(), false, false, created.version());
+        changeProductSalesPolicyService.changePolicy(created.productId(), false, false, created.version(), auditContext);
 
-        assertThatThrownBy(() -> changeProductSalesPolicyService.changePolicy(created.productId(), true, true, created.version()))
+        assertThatThrownBy(
+                        () ->
+                                changeProductSalesPolicyService.changePolicy(
+                                        created.productId(), true, true, created.version(), auditContext))
                 .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     @Test
     @DisplayName("존재하지 않는 Product의 정책을 바꾸면 ProductNotFoundException")
     void changeSalesPolicyForNonExistentProductFails() {
-        assertThatThrownBy(() -> changeProductSalesPolicyService.changePolicy(UUID.randomUUID(), true, false, 0L))
+        assertThatThrownBy(
+                        () -> changeProductSalesPolicyService.changePolicy(UUID.randomUUID(), true, false, 0L, auditContext))
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
@@ -96,7 +104,7 @@ class ProductSalesStateIntegrationTest {
     void changeSoldOutSucceeds() {
         Product created = createProduct();
 
-        Product updated = changeSoldOutService.changeSoldOut(created.productId(), true, created.version());
+        Product updated = changeSoldOutService.changeSoldOut(created.productId(), true, created.version(), auditContext);
 
         assertThat(updated.soldOut()).isTrue();
         assertThat(updated.version()).isGreaterThan(created.version());
@@ -108,7 +116,7 @@ class ProductSalesStateIntegrationTest {
         Product created = createProduct();
         long staleVersion = created.version() + 999;
 
-        Product result = changeSoldOutService.changeSoldOut(created.productId(), created.soldOut(), staleVersion);
+        Product result = changeSoldOutService.changeSoldOut(created.productId(), created.soldOut(), staleVersion, auditContext);
 
         assertThat(result.soldOut()).isEqualTo(created.soldOut());
         assertThat(result.version()).isEqualTo(created.version());
@@ -118,16 +126,16 @@ class ProductSalesStateIntegrationTest {
     @DisplayName("값이 실제로 바뀌는데 낡은 version이면 OptimisticLockingFailureException")
     void changeSoldOutWithStaleVersionFailsWhenValueChanges() {
         Product created = createProduct();
-        changeSoldOutService.changeSoldOut(created.productId(), true, created.version());
+        changeSoldOutService.changeSoldOut(created.productId(), true, created.version(), auditContext);
 
-        assertThatThrownBy(() -> changeSoldOutService.changeSoldOut(created.productId(), false, created.version()))
+        assertThatThrownBy(() -> changeSoldOutService.changeSoldOut(created.productId(), false, created.version(), auditContext))
                 .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     @Test
     @DisplayName("존재하지 않는 Product를 품절 처리하면 ProductNotFoundException")
     void changeSoldOutForNonExistentProductFails() {
-        assertThatThrownBy(() -> changeSoldOutService.changeSoldOut(UUID.randomUUID(), true, 0L))
+        assertThatThrownBy(() -> changeSoldOutService.changeSoldOut(UUID.randomUUID(), true, 0L, auditContext))
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
@@ -139,7 +147,8 @@ class ProductSalesStateIntegrationTest {
         Product created = createProduct();
         assertThat(stockManagementPolicyReader.isStockManaged(created.productId())).isFalse();
 
-        changeProductSalesPolicyService.changePolicy(created.productId(), created.salesEnabled(), true, created.version());
+        changeProductSalesPolicyService.changePolicy(
+                created.productId(), created.salesEnabled(), true, created.version(), auditContext);
 
         assertThat(stockManagementPolicyReader.isStockManaged(created.productId())).isTrue();
     }

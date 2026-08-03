@@ -1,11 +1,18 @@
 package com.dorosoft.erp.catalog.application.category;
 
+import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTargetType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
 import com.dorosoft.erp.catalog.domain.category.Category;
 import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyKeyReusedException;
 import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyRequestHash;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,16 +24,21 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CreateCategoryService {
 
+    private static final String VALUE_SCHEMA_VERSION = "v1";
+
     private final CategoryRepository categoryRepository;
     private final CatalogRevisionRepository catalogRevisionRepository;
+    private final AuditWriter auditWriter;
 
-    public CreateCategoryService(CategoryRepository categoryRepository, CatalogRevisionRepository catalogRevisionRepository) {
+    public CreateCategoryService(
+            CategoryRepository categoryRepository, CatalogRevisionRepository catalogRevisionRepository, AuditWriter auditWriter) {
         this.categoryRepository = categoryRepository;
         this.catalogRevisionRepository = catalogRevisionRepository;
+        this.auditWriter = auditWriter;
     }
 
     @Transactional
-    public Category create(String name, String idempotencyKey) {
+    public Category create(String name, String idempotencyKey, AuditContext auditContext) {
         String requestHash = IdempotencyRequestHash.of(name);
 
         if (idempotencyKey != null) {
@@ -48,6 +60,20 @@ public class CreateCategoryService {
         int nextDisplayOrder = categoryRepository.findAll().size();
         Category category =
                 Category.create(UUID.randomUUID(), catalogId, name, nextDisplayOrder, Instant.now(), idempotencyKey, requestHash);
-        return categoryRepository.save(category);
+        Category saved = categoryRepository.save(category);
+
+        auditWriter.record(
+                AuditRecordCommand.of(
+                        "CATALOG",
+                        "CATEGORY_CREATED",
+                        UUID.randomUUID().toString(),
+                        0,
+                        new AuditTarget(AuditTargetType.CATEGORY, saved.categoryId().toString()),
+                        "{}",
+                        CatalogAuditValues.write(Map.of("name", saved.name(), "version", saved.version())),
+                        VALUE_SCHEMA_VERSION),
+                auditContext);
+
+        return saved;
     }
 }

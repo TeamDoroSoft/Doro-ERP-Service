@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dorosoft.erp.TestcontainersConfiguration;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.product.CreateProductCommand;
 import com.dorosoft.erp.catalog.application.product.CreateProductService;
 import com.dorosoft.erp.catalog.application.product.ReplaceProductBasicInfoCommand;
@@ -43,6 +44,7 @@ class ProductManagementIntegrationTest {
     private UUID catalogId;
     private UUID categoryId;
     private UUID readyMediaId;
+    private AuditContext auditContext;
 
     @BeforeEach
     void 테이블을_비우고_Catalog와_Category를_준비한다() {
@@ -50,6 +52,7 @@ class ProductManagementIntegrationTest {
         catalogId = CatalogIntegrationSupport.insertCatalogRevision(jdbcClient);
         categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
         readyMediaId = CatalogIntegrationSupport.insertReadyProductMedia(jdbcClient, catalogId, "americano");
+        auditContext = CatalogIntegrationSupport.testAuditContext();
     }
 
     private CreateProductCommand basicCommand(String idempotencyKey) {
@@ -61,10 +64,10 @@ class ProductManagementIntegrationTest {
     @Test
     @DisplayName("생성한 Product는 Category 안에서 마지막 순서를 받고 soldOut=false다")
     void createsProductAppendedAtEndOfCategory() {
-        Product first = createProductService.create(basicCommand(null));
+        Product first = createProductService.create(basicCommand(null), auditContext);
         Product second =
                 createProductService.create(
-                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null));
+                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null), auditContext);
 
         assertThat(first.displayOrder()).isZero();
         assertThat(second.displayOrder()).isEqualTo(1);
@@ -78,7 +81,7 @@ class ProductManagementIntegrationTest {
         CreateProductCommand command =
                 new CreateProductCommand(UUID.randomUUID(), "이름", null, 1000L, null, null, true, false, null);
 
-        assertThatThrownBy(() -> createProductService.create(command)).isInstanceOf(CategoryNotFoundException.class);
+        assertThatThrownBy(() -> createProductService.create(command, auditContext)).isInstanceOf(CategoryNotFoundException.class);
     }
 
     @Test
@@ -87,7 +90,7 @@ class ProductManagementIntegrationTest {
         CreateProductCommand command =
                 new CreateProductCommand(categoryId, "이름", null, -100L, null, null, true, false, null);
 
-        assertThatThrownBy(() -> createProductService.create(command)).isInstanceOf(InvalidPriceException.class);
+        assertThatThrownBy(() -> createProductService.create(command, auditContext)).isInstanceOf(InvalidPriceException.class);
     }
 
     @Test
@@ -96,7 +99,7 @@ class ProductManagementIntegrationTest {
         CreateProductCommand command =
                 new CreateProductCommand(categoryId, "이름", null, 1000L, UUID.randomUUID(), null, true, false, null);
 
-        assertThatThrownBy(() -> createProductService.create(command)).isInstanceOf(MediaNotFoundException.class);
+        assertThatThrownBy(() -> createProductService.create(command, auditContext)).isInstanceOf(MediaNotFoundException.class);
     }
 
     @Test
@@ -106,7 +109,7 @@ class ProductManagementIntegrationTest {
         CreateProductCommand command =
                 new CreateProductCommand(categoryId, "이름", null, 1000L, pendingMediaId, null, true, false, null);
 
-        assertThatThrownBy(() -> createProductService.create(command)).isInstanceOf(MediaNotReadyException.class);
+        assertThatThrownBy(() -> createProductService.create(command, auditContext)).isInstanceOf(MediaNotReadyException.class);
     }
 
     @Test
@@ -115,7 +118,7 @@ class ProductManagementIntegrationTest {
         CreateProductCommand command =
                 new CreateProductCommand(categoryId, "이름", null, 1000L, readyMediaId, "대체텍스트", true, false, null);
 
-        Product created = createProductService.create(command);
+        Product created = createProductService.create(command, auditContext);
 
         assertThat(created.mediaId()).isEqualTo(readyMediaId);
     }
@@ -126,9 +129,9 @@ class ProductManagementIntegrationTest {
     @DisplayName("같은 Idempotency-Key와 같은 내용의 재요청은 기존 결과를 그대로 반환한다")
     void idempotentRetryWithSameBodyReturnsExistingProduct() {
         String key = "idem-1";
-        Product first = createProductService.create(basicCommand(key));
+        Product first = createProductService.create(basicCommand(key), auditContext);
 
-        Product retried = createProductService.create(basicCommand(key));
+        Product retried = createProductService.create(basicCommand(key), auditContext);
 
         assertThat(retried.productId()).isEqualTo(first.productId());
         Long count = jdbcClient.sql("SELECT COUNT(*) FROM product").query(Long.class).single();
@@ -139,12 +142,13 @@ class ProductManagementIntegrationTest {
     @DisplayName("같은 Idempotency-Key를 다른 내용으로 재요청하면 IdempotencyKeyReusedException")
     void idempotentRetryWithDifferentBodyFails() {
         String key = "idem-2";
-        createProductService.create(basicCommand(key));
+        createProductService.create(basicCommand(key), auditContext);
 
         CreateProductCommand differentBody =
                 new CreateProductCommand(categoryId, "다른 이름", null, 4500L, null, null, true, false, key);
 
-        assertThatThrownBy(() -> createProductService.create(differentBody)).isInstanceOf(IdempotencyKeyReusedException.class);
+        assertThatThrownBy(() -> createProductService.create(differentBody, auditContext))
+                .isInstanceOf(IdempotencyKeyReusedException.class);
     }
 
     // --- 기본 정보 변경 ------------------------------------------------------
@@ -152,13 +156,14 @@ class ProductManagementIntegrationTest {
     @Test
     @DisplayName("기본 정보를 바꾸면 반영되고 soldOut·options는 유지된다")
     void updateReplacesBasicInfo() {
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
 
         Product updated =
                 updateProductService.replaceBasicInfo(
                         created.productId(),
                         new ReplaceProductBasicInfoCommand(categoryId, "카페라떼", "부드러운 우유 거품", 5000L, null, null, false, true),
-                        created.version());
+                        created.version(),
+                        auditContext);
 
         assertThat(updated.name()).isEqualTo("카페라떼");
         assertThat(updated.basePrice()).isEqualTo(5000L);
@@ -170,15 +175,17 @@ class ProductManagementIntegrationTest {
     @Test
     @DisplayName("낡은 version으로 기본 정보를 바꾸면 OptimisticLockingFailureException")
     void updateWithStaleVersionFails() {
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
         updateProductService.replaceBasicInfo(
                 created.productId(),
                 new ReplaceProductBasicInfoCommand(categoryId, "1차 수정", null, 4600L, null, null, true, false),
-                created.version());
+                created.version(),
+                auditContext);
 
         ReplaceProductBasicInfoCommand staleUpdate =
                 new ReplaceProductBasicInfoCommand(categoryId, "뒤늦은 수정", null, 4700L, null, null, true, false);
-        assertThatThrownBy(() -> updateProductService.replaceBasicInfo(created.productId(), staleUpdate, created.version()))
+        assertThatThrownBy(
+                        () -> updateProductService.replaceBasicInfo(created.productId(), staleUpdate, created.version(), auditContext))
                 .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
@@ -188,7 +195,7 @@ class ProductManagementIntegrationTest {
         ReplaceProductBasicInfoCommand command =
                 new ReplaceProductBasicInfoCommand(categoryId, "이름", null, 1000L, null, null, true, false);
 
-        assertThatThrownBy(() -> updateProductService.replaceBasicInfo(UUID.randomUUID(), command, 0L))
+        assertThatThrownBy(() -> updateProductService.replaceBasicInfo(UUID.randomUUID(), command, 0L, auditContext))
                 .isInstanceOf(ProductNotFoundException.class);
     }
 
@@ -197,13 +204,14 @@ class ProductManagementIntegrationTest {
     void updateMovingCategoryAppendsAtEnd() {
         UUID otherCategory = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "차", 1);
         CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, otherCategory, "기존 차 상품", 3000L, 0);
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
 
         Product moved =
                 updateProductService.replaceBasicInfo(
                         created.productId(),
                         new ReplaceProductBasicInfoCommand(otherCategory, "녹차", null, 4000L, null, null, true, false),
-                        created.version());
+                        created.version(),
+                        auditContext);
 
         assertThat(moved.categoryId()).isEqualTo(otherCategory);
         assertThat(moved.displayOrder()).isEqualTo(1);
@@ -214,11 +222,14 @@ class ProductManagementIntegrationTest {
     @Test
     @DisplayName("옵션을 바꾸면 Product version이 오른다(OneToMany 컬렉션만 바뀐 경우 포함)")
     void replaceOptionsBumpsProductVersion() {
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
 
         Product withOptions =
                 replaceProductOptionsService.replaceOptions(
-                        created.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), created.version());
+                        created.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        created.version(),
+                        auditContext);
 
         assertThat(withOptions.version()).isGreaterThan(created.version());
         assertThat(withOptions.options()).hasSize(1);
@@ -228,10 +239,13 @@ class ProductManagementIntegrationTest {
     @Test
     @DisplayName("기존 옵션 ID 누락은 거부되고, enabled=false 비활성화는 허용된다")
     void replaceOptionsOmissionRules() {
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
         Product withOption =
                 replaceProductOptionsService.replaceOptions(
-                        created.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), created.version());
+                        created.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        created.version(),
+                        auditContext);
         UUID optionId = withOption.options().get(0).optionId();
 
         assertThatThrownBy(
@@ -239,52 +253,62 @@ class ProductManagementIntegrationTest {
                                 replaceProductOptionsService.replaceOptions(
                                         created.productId(),
                                         List.of(new ProductOptionRequest(null, "새 옵션", 300L, true)),
-                                        withOption.version()))
+                                        withOption.version(),
+                                        auditContext))
                 .isInstanceOf(OptionOmissionNotAllowedException.class);
 
         Product disabled =
                 replaceProductOptionsService.replaceOptions(
                         created.productId(),
                         List.of(new ProductOptionRequest(optionId, "샷 추가", 500L, false)),
-                        withOption.version());
+                        withOption.version(),
+                        auditContext);
         assertThat(disabled.options().get(0).enabled()).isFalse();
     }
 
     @Test
     @DisplayName("다른 Product의 옵션 ID로 교체를 시도하면 InvalidProductOptionsException")
     void replaceOptionsWithForeignProductOptionFails() {
-        Product productA = createProductService.create(basicCommand(null));
+        Product productA = createProductService.create(basicCommand(null), auditContext);
         Product productAWithOption =
                 replaceProductOptionsService.replaceOptions(
-                        productA.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), productA.version());
+                        productA.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        productA.version(),
+                        auditContext);
         UUID foreignOptionId = productAWithOption.options().get(0).optionId();
 
         Product productB =
                 createProductService.create(
-                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null));
+                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null), auditContext);
 
         assertThatThrownBy(
                         () ->
                                 replaceProductOptionsService.replaceOptions(
                                         productB.productId(),
                                         List.of(new ProductOptionRequest(foreignOptionId, "다른 상품 옵션", 100L, true)),
-                                        productB.version()))
+                                        productB.version(),
+                                        auditContext))
                 .isInstanceOf(InvalidProductOptionsException.class);
     }
 
     @Test
     @DisplayName("낡은 version으로 옵션을 바꾸면 OptimisticLockingFailureException")
     void replaceOptionsWithStaleVersionFails() {
-        Product created = createProductService.create(basicCommand(null));
+        Product created = createProductService.create(basicCommand(null), auditContext);
         replaceProductOptionsService.replaceOptions(
-                created.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), created.version());
+                created.productId(),
+                List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                created.version(),
+                auditContext);
 
         assertThatThrownBy(
                         () ->
                                 replaceProductOptionsService.replaceOptions(
                                         created.productId(),
                                         List.of(new ProductOptionRequest(null, "또 다른 옵션", 200L, true)),
-                                        created.version()))
+                                        created.version(),
+                                        auditContext))
                 .isInstanceOf(OptimisticLockingFailureException.class);
     }
 

@@ -1,6 +1,8 @@
 package com.dorosoft.erp.catalog;
 
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -117,5 +119,10 @@ final class CatalogIntegrationSupport {
 
     static long countOf(JdbcClient jdbcClient, String table) {
         return jdbcClient.sql("SELECT COUNT(*) FROM " + table).query(Long.class).single();
+    }
+
+    /** Controller가 없는 현재 단계에서 감사 연동 Use Case를 호출하기 위한 테스트용 AuditContext다. */
+    static AuditContext testAuditContext() {
+        return new AuditContext("test-actor", "ADMIN", Instant.now(), UUID.randomUUID().toString());
     }
 }

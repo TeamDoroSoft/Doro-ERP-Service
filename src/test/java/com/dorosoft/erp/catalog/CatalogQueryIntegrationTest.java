@@ -8,6 +8,7 @@ import com.dorosoft.erp.catalog.application.api.PublishedMenu;
 import com.dorosoft.erp.catalog.application.api.PublishedMenuReader;
 import com.dorosoft.erp.catalog.application.api.PublishedProduct;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.product.ChangeProductSalesPolicyService;
 import com.dorosoft.erp.catalog.application.product.ChangeSoldOutService;
 import com.dorosoft.erp.catalog.application.product.CreateProductCommand;
@@ -48,15 +49,18 @@ class CatalogQueryIntegrationTest {
     @Autowired private JdbcClient jdbcClient;
 
     private UUID catalogId;
+    private AuditContext auditContext;
 
     @BeforeEach
     void 테이블을_비운다() {
         CatalogIntegrationSupport.cleanCatalogTables(jdbcClient);
         catalogId = CatalogIntegrationSupport.insertCatalogRevision(jdbcClient);
+        auditContext = CatalogIntegrationSupport.testAuditContext();
     }
 
     private Product createProduct(UUID categoryId, String name) {
-        return createProductService.create(new CreateProductCommand(categoryId, name, null, 4500L, null, null, true, false, null));
+        return createProductService.create(
+                new CreateProductCommand(categoryId, name, null, 4500L, null, null, true, false, null), auditContext);
     }
 
     // --- 공개 메뉴 Projection ---------------------------------------------------
@@ -69,11 +73,11 @@ class CatalogQueryIntegrationTest {
 
         Product americano = createProduct(coffeeCategory, "아메리카노");
         Product latte = createProduct(coffeeCategory, "카페라떼");
-        changeProductSalesPolicyService.changePolicy(latte.productId(), false, false, latte.version());
+        changeProductSalesPolicyService.changePolicy(latte.productId(), false, false, latte.version(), auditContext);
 
         Product onlyProductInEmptyCategory = createProduct(emptyCategory, "숨겨질 상품");
         changeProductSalesPolicyService.changePolicy(
-                onlyProductInEmptyCategory.productId(), false, false, onlyProductInEmptyCategory.version());
+                onlyProductInEmptyCategory.productId(), false, false, onlyProductInEmptyCategory.version(), auditContext);
 
         PublishedMenu menu = publishedMenuReader.getPublishedMenu();
 
@@ -88,7 +92,7 @@ class CatalogQueryIntegrationTest {
     void showsSoldOutProductAsNotOrderable() {
         UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
         Product product = createProduct(categoryId, "아메리카노");
-        changeSoldOutService.changeSoldOut(product.productId(), true, product.version());
+        changeSoldOutService.changeSoldOut(product.productId(), true, product.version(), auditContext);
 
         PublishedMenu menu = publishedMenuReader.getPublishedMenu();
 
@@ -108,7 +112,8 @@ class CatalogQueryIntegrationTest {
                         List.of(
                                 new ProductOptionRequest(null, "샷 추가", 500L, true),
                                 new ProductOptionRequest(null, "비활성 옵션", 300L, false)),
-                        product.version());
+                        product.version(),
+                        auditContext);
         assertThat(withOptions.options()).hasSize(2);
 
         PublishedMenu menu = publishedMenuReader.getPublishedMenu();
@@ -125,7 +130,8 @@ class CatalogQueryIntegrationTest {
         UUID readyMediaId = CatalogIntegrationSupport.insertReadyProductMedia(jdbcClient, catalogId, "americano");
         Product withMedia =
                 createProductService.create(
-                        new CreateProductCommand(categoryId, "아메리카노", null, 4500L, readyMediaId, "설명", true, false, null));
+                        new CreateProductCommand(categoryId, "아메리카노", null, 4500L, readyMediaId, "설명", true, false, null),
+                        auditContext);
         Product withoutMedia = createProduct(categoryId, "카페라떼");
 
         PublishedMenu menu = publishedMenuReader.getPublishedMenu();
@@ -165,11 +171,12 @@ class CatalogQueryIntegrationTest {
         UUID emptyCategoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "빈카테고리", 1);
         Product product = createProduct(categoryId, "아메리카노");
         Product afterPolicyChange =
-                changeProductSalesPolicyService.changePolicy(product.productId(), false, false, product.version());
+                changeProductSalesPolicyService.changePolicy(product.productId(), false, false, product.version(), auditContext);
         replaceProductOptionsService.replaceOptions(
                 product.productId(),
                 List.of(new ProductOptionRequest(null, "비활성 옵션", 300L, false)),
-                afterPolicyChange.version());
+                afterPolicyChange.version(),
+                auditContext);
 
         CatalogOverview overview = catalogOverviewQueryService.getOverview();
 
@@ -192,7 +199,7 @@ class CatalogQueryIntegrationTest {
         UUID teaCategory = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "차", 1);
         Product americano = createProduct(coffeeCategory, "아메리카노");
         Product latte = createProduct(coffeeCategory, "카페라떼");
-        changeProductSalesPolicyService.changePolicy(latte.productId(), false, false, latte.version());
+        changeProductSalesPolicyService.changePolicy(latte.productId(), false, false, latte.version(), auditContext);
         createProduct(teaCategory, "녹차");
 
         ProductListPage byCategoryOnly = productListQueryService.list(coffeeCategory, null, null, null, 10);

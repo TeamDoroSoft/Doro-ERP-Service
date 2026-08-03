@@ -1,6 +1,12 @@
 package com.dorosoft.erp.catalog.application.product;
 
+import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTargetType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
 import com.dorosoft.erp.catalog.domain.product.Product;
 import com.dorosoft.erp.catalog.domain.product.ProductNotFoundException;
 import java.util.UUID;
@@ -18,14 +24,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ChangeProductSalesPolicyService {
 
-    private final ProductRepository productRepository;
+    private static final String VALUE_SCHEMA_VERSION = "v1";
 
-    public ChangeProductSalesPolicyService(ProductRepository productRepository) {
+    private final ProductRepository productRepository;
+    private final AuditWriter auditWriter;
+
+    public ChangeProductSalesPolicyService(ProductRepository productRepository, AuditWriter auditWriter) {
         this.productRepository = productRepository;
+        this.auditWriter = auditWriter;
     }
 
     @Transactional
-    public Product changePolicy(UUID productId, boolean salesEnabled, boolean stockManaged, long expectedVersion) {
+    public Product changePolicy(
+            UUID productId, boolean salesEnabled, boolean stockManaged, long expectedVersion, AuditContext auditContext) {
         Product current = productRepository.findById(productId).orElseThrow(() -> new ProductNotFoundException(productId));
         if (current.version() != expectedVersion) {
             throw new OptimisticLockingFailureException(
@@ -35,6 +46,31 @@ public class ChangeProductSalesPolicyService {
         if (current.salesEnabled() == salesEnabled && current.stockManaged() == stockManaged) {
             return current;
         }
-        return productRepository.save(current.changeSalesPolicy(salesEnabled, stockManaged));
+        Product saved = productRepository.save(current.changeSalesPolicy(salesEnabled, stockManaged));
+
+        auditWriter.record(
+                new AuditRecordCommand(
+                        "CATALOG",
+                        "PRODUCT_SALES_POLICY_CHANGED",
+                        UUID.randomUUID().toString(),
+                        0,
+                        new AuditTarget(AuditTargetType.PRODUCT, productId.toString()),
+                        null,
+                        CatalogAuditValues.write(
+                                CatalogAuditValues.map(
+                                        "salesEnabled", current.salesEnabled(),
+                                        "stockManaged", current.stockManaged(),
+                                        "version", current.version())),
+                        CatalogAuditValues.write(
+                                CatalogAuditValues.map(
+                                        "salesEnabled", saved.salesEnabled(),
+                                        "stockManaged", saved.stockManaged(),
+                                        "version", saved.version())),
+                        null,
+                        null,
+                        VALUE_SCHEMA_VERSION),
+                auditContext);
+
+        return saved;
     }
 }

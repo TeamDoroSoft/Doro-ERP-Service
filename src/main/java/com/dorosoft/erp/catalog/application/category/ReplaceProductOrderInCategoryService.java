@@ -1,12 +1,22 @@
 package com.dorosoft.erp.catalog.application.category;
 
+import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.ProductOrderRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRelatedTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRelationType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTargetType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
 import com.dorosoft.erp.catalog.domain.category.CategoryNotFoundException;
 import com.dorosoft.erp.catalog.domain.category.DisplayOrderValidation;
 import com.dorosoft.erp.catalog.domain.revision.CatalogRevision;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
@@ -20,21 +30,27 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReplaceProductOrderInCategoryService {
 
+    private static final String VALUE_SCHEMA_VERSION = "v1";
+
     private final CategoryRepository categoryRepository;
     private final ProductOrderRepository productOrderRepository;
     private final CatalogRevisionRepository catalogRevisionRepository;
+    private final AuditWriter auditWriter;
 
     public ReplaceProductOrderInCategoryService(
             CategoryRepository categoryRepository,
             ProductOrderRepository productOrderRepository,
-            CatalogRevisionRepository catalogRevisionRepository) {
+            CatalogRevisionRepository catalogRevisionRepository,
+            AuditWriter auditWriter) {
         this.categoryRepository = categoryRepository;
         this.productOrderRepository = productOrderRepository;
         this.catalogRevisionRepository = catalogRevisionRepository;
+        this.auditWriter = auditWriter;
     }
 
     @Transactional
-    public CatalogRevision replaceOrder(UUID categoryId, List<UUID> orderedProductIds, long expectedCatalogRevision) {
+    public CatalogRevision replaceOrder(
+            UUID categoryId, List<UUID> orderedProductIds, long expectedCatalogRevision, AuditContext auditContext) {
         if (categoryRepository.findById(categoryId).isEmpty()) {
             throw new CategoryNotFoundException(categoryId);
         }
@@ -53,6 +69,34 @@ public class ReplaceProductOrderInCategoryService {
         }
 
         productOrderRepository.replaceDisplayOrder(categoryId, orderedProductIds);
-        return catalogRevisionRepository.save(current);
+        CatalogRevision advanced = catalogRevisionRepository.save(current);
+
+        if (!orderedProductIds.isEmpty()) {
+            List<AuditRelatedTarget> related = new ArrayList<>();
+            related.add(new AuditRelatedTarget(AuditRelationType.CATEGORY, AuditTargetType.CATEGORY, categoryId.toString()));
+            orderedProductIds.stream()
+                    .skip(1)
+                    .forEach(id -> related.add(new AuditRelatedTarget(AuditRelationType.PRODUCT, AuditTargetType.PRODUCT, id.toString())));
+
+            auditWriter.record(
+                    new AuditRecordCommand(
+                            "CATALOG",
+                            "PRODUCT_ORDER_CHANGED",
+                            UUID.randomUUID().toString(),
+                            0,
+                            new AuditTarget(AuditTargetType.PRODUCT, orderedProductIds.get(0).toString()),
+                            related,
+                            CatalogAuditValues.write(
+                                    Map.of("categoryId", categoryId, "productIds", existingIds, "catalogRevision", current.revision())),
+                            CatalogAuditValues.write(
+                                    Map.of(
+                                            "categoryId", categoryId, "productIds", orderedProductIds, "catalogRevision", advanced.revision())),
+                            null,
+                            null,
+                            VALUE_SCHEMA_VERSION),
+                    auditContext);
+        }
+
+        return advanced;
     }
 }

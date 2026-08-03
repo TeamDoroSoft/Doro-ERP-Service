@@ -1,6 +1,12 @@
 package com.dorosoft.erp.catalog.application.product;
 
+import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTargetType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
 import com.dorosoft.erp.catalog.domain.product.Product;
 import com.dorosoft.erp.catalog.domain.product.ProductNotFoundException;
 import java.util.UUID;
@@ -15,14 +21,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ChangeSoldOutService {
 
-    private final ProductRepository productRepository;
+    private static final String VALUE_SCHEMA_VERSION = "v1";
 
-    public ChangeSoldOutService(ProductRepository productRepository) {
+    private final ProductRepository productRepository;
+    private final AuditWriter auditWriter;
+
+    public ChangeSoldOutService(ProductRepository productRepository, AuditWriter auditWriter) {
         this.productRepository = productRepository;
+        this.auditWriter = auditWriter;
     }
 
     @Transactional
-    public Product changeSoldOut(UUID productId, boolean soldOut, long expectedVersion) {
+    public Product changeSoldOut(UUID productId, boolean soldOut, long expectedVersion, AuditContext auditContext) {
         Product current = productRepository.findById(productId).orElseThrow(() -> new ProductNotFoundException(productId));
         if (current.soldOut() == soldOut) {
             return current;
@@ -32,6 +42,23 @@ public class ChangeSoldOutService {
                     "Product가 다른 요청에서 변경되었습니다. productId=" + productId + ", 요청 version=" + expectedVersion
                             + ", 현재 version=" + current.version());
         }
-        return productRepository.save(current.changeSoldOut(soldOut));
+        Product saved = productRepository.save(current.changeSoldOut(soldOut));
+
+        auditWriter.record(
+                new AuditRecordCommand(
+                        "CATALOG",
+                        "PRODUCT_SOLD_OUT_CHANGED",
+                        UUID.randomUUID().toString(),
+                        0,
+                        new AuditTarget(AuditTargetType.PRODUCT, productId.toString()),
+                        null,
+                        CatalogAuditValues.write(CatalogAuditValues.map("soldOut", current.soldOut(), "version", current.version())),
+                        CatalogAuditValues.write(CatalogAuditValues.map("soldOut", saved.soldOut(), "version", saved.version())),
+                        null,
+                        null,
+                        VALUE_SCHEMA_VERSION),
+                auditContext);
+
+        return saved;
     }
 }

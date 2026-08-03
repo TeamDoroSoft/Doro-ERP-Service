@@ -1,9 +1,17 @@
 package com.dorosoft.erp.catalog.application.product;
 
+import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.ProductMediaRepository;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRelatedTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditRelationType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTarget;
+import com.dorosoft.erp.catalog.application.port.audit.AuditTargetType;
+import com.dorosoft.erp.catalog.application.port.audit.AuditWriter;
 import com.dorosoft.erp.catalog.domain.category.CategoryNotFoundException;
 import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyKeyReusedException;
 import com.dorosoft.erp.catalog.domain.idempotency.IdempotencyRequestHash;
@@ -12,6 +20,7 @@ import com.dorosoft.erp.catalog.domain.media.ProductMedia;
 import com.dorosoft.erp.catalog.domain.product.MediaNotReadyException;
 import com.dorosoft.erp.catalog.domain.product.Product;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,24 +29,29 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CreateProductService {
 
+    private static final String VALUE_SCHEMA_VERSION = "v1";
+
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductMediaRepository productMediaRepository;
     private final CatalogRevisionRepository catalogRevisionRepository;
+    private final AuditWriter auditWriter;
 
     public CreateProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
             ProductMediaRepository productMediaRepository,
-            CatalogRevisionRepository catalogRevisionRepository) {
+            CatalogRevisionRepository catalogRevisionRepository,
+            AuditWriter auditWriter) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.productMediaRepository = productMediaRepository;
         this.catalogRevisionRepository = catalogRevisionRepository;
+        this.auditWriter = auditWriter;
     }
 
     @Transactional
-    public Product create(CreateProductCommand command) {
+    public Product create(CreateProductCommand command, AuditContext auditContext) {
         String requestHash =
                 IdempotencyRequestHash.of(
                         command.categoryId(),
@@ -87,7 +101,31 @@ public class CreateProductService {
                         Instant.now(),
                         command.idempotencyKey(),
                         requestHash);
-        return productRepository.save(product);
+        Product saved = productRepository.save(product);
+
+        auditWriter.record(
+                new AuditRecordCommand(
+                        "CATALOG",
+                        "PRODUCT_CREATED",
+                        UUID.randomUUID().toString(),
+                        0,
+                        new AuditTarget(AuditTargetType.PRODUCT, saved.productId().toString()),
+                        List.of(
+                                new AuditRelatedTarget(
+                                        AuditRelationType.CATEGORY, AuditTargetType.CATEGORY, saved.categoryId().toString())),
+                        "{}",
+                        CatalogAuditValues.write(
+                                CatalogAuditValues.map(
+                                        "name", saved.name(),
+                                        "description", saved.description(),
+                                        "categoryId", saved.categoryId(),
+                                        "version", saved.version())),
+                        null,
+                        null,
+                        VALUE_SCHEMA_VERSION),
+                auditContext);
+
+        return saved;
     }
 
     private void validateMediaReady(UUID mediaId) {

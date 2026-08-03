@@ -7,6 +7,7 @@ import com.dorosoft.erp.TestcontainersConfiguration;
 import com.dorosoft.erp.catalog.application.api.OrderCatalogReader;
 import com.dorosoft.erp.catalog.application.api.OrderCatalogSnapshot;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
+import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.product.ChangeProductSalesPolicyService;
 import com.dorosoft.erp.catalog.application.product.ChangeSoldOutService;
 import com.dorosoft.erp.catalog.application.product.CreateProductCommand;
@@ -44,17 +45,19 @@ class OrderCatalogReaderIntegrationTest {
     @Autowired private JdbcClient jdbcClient;
 
     private UUID categoryId;
+    private AuditContext auditContext;
 
     @BeforeEach
     void 테이블을_비우고_Category를_준비한다() {
         CatalogIntegrationSupport.cleanCatalogTables(jdbcClient);
         UUID catalogId = CatalogIntegrationSupport.insertCatalogRevision(jdbcClient);
         categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        auditContext = CatalogIntegrationSupport.testAuditContext();
     }
 
     private Product createProduct() {
         return createProductService.create(
-                new CreateProductCommand(categoryId, "아메리카노", null, 4500L, null, null, true, false, null));
+                new CreateProductCommand(categoryId, "아메리카노", null, 4500L, null, null, true, false, null), auditContext);
     }
 
     @Test
@@ -77,7 +80,10 @@ class OrderCatalogReaderIntegrationTest {
         Product product = createProduct();
         Product withOptions =
                 replaceProductOptionsService.replaceOptions(
-                        product.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), product.version());
+                        product.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        product.version(),
+                        auditContext);
         UUID optionId = withOptions.options().get(0).optionId();
 
         OrderCatalogSnapshot snapshot = orderCatalogReader.resolveForOrder(product.productId(), List.of(optionId));
@@ -99,7 +105,7 @@ class OrderCatalogReaderIntegrationTest {
     @DisplayName("판매 비활성 상품은 PRODUCT_NOT_FOR_SALE")
     void throwsWhenNotForSale() {
         Product product = createProduct();
-        changeProductSalesPolicyService.changePolicy(product.productId(), false, false, product.version());
+        changeProductSalesPolicyService.changePolicy(product.productId(), false, false, product.version(), auditContext);
 
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(product.productId(), List.of()))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(OrderabilityRejectedException.class))
@@ -111,7 +117,7 @@ class OrderCatalogReaderIntegrationTest {
     @DisplayName("수동 품절 상품은 PRODUCT_SOLD_OUT")
     void throwsWhenSoldOut() {
         Product product = createProduct();
-        changeSoldOutService.changeSoldOut(product.productId(), true, product.version());
+        changeSoldOutService.changeSoldOut(product.productId(), true, product.version(), auditContext);
 
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(product.productId(), List.of()))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(OrderabilityRejectedException.class))
@@ -125,7 +131,10 @@ class OrderCatalogReaderIntegrationTest {
         Product product = createProduct();
         Product withOptions =
                 replaceProductOptionsService.replaceOptions(
-                        product.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), product.version());
+                        product.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        product.version(),
+                        auditContext);
         UUID optionId = withOptions.options().get(0).optionId();
 
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(product.productId(), List.of(optionId, optionId)))
@@ -140,12 +149,15 @@ class OrderCatalogReaderIntegrationTest {
         Product productA = createProduct();
         Product productAWithOption =
                 replaceProductOptionsService.replaceOptions(
-                        productA.productId(), List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)), productA.version());
+                        productA.productId(),
+                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        productA.version(),
+                        auditContext);
         UUID foreignOptionId = productAWithOption.options().get(0).optionId();
 
         Product productB =
                 createProductService.create(
-                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null));
+                        new CreateProductCommand(categoryId, "카페라떼", null, 5000L, null, null, true, false, null), auditContext);
 
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(productB.productId(), List.of(foreignOptionId)))
                 .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(OrderabilityRejectedException.class))
@@ -159,7 +171,10 @@ class OrderCatalogReaderIntegrationTest {
         Product product = createProduct();
         Product withDisabledOption =
                 replaceProductOptionsService.replaceOptions(
-                        product.productId(), List.of(new ProductOptionRequest(null, "단종 옵션", 500L, false)), product.version());
+                        product.productId(),
+                        List.of(new ProductOptionRequest(null, "단종 옵션", 500L, false)),
+                        product.version(),
+                        auditContext);
         UUID optionId = withDisabledOption.options().get(0).optionId();
 
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(product.productId(), List.of(optionId)))
@@ -177,7 +192,8 @@ class OrderCatalogReaderIntegrationTest {
         updateProductService.replaceBasicInfo(
                 product.productId(),
                 new ReplaceProductBasicInfoCommand(categoryId, "아메리카노", null, 5000L, null, null, true, false),
-                product.version());
+                product.version(),
+                auditContext);
 
         assertThat(orderCatalogReader.resolveForOrder(product.productId(), List.of()).baseUnitPrice()).isEqualTo(5000L);
     }
@@ -188,7 +204,7 @@ class OrderCatalogReaderIntegrationTest {
         Product product = createProduct();
         assertThat(orderCatalogReader.resolveForOrder(product.productId(), List.of()).stockManaged()).isFalse();
 
-        changeProductSalesPolicyService.changePolicy(product.productId(), true, true, product.version());
+        changeProductSalesPolicyService.changePolicy(product.productId(), true, true, product.version(), auditContext);
 
         assertThat(orderCatalogReader.resolveForOrder(product.productId(), List.of()).stockManaged()).isTrue();
     }

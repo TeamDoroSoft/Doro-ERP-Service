@@ -1,3 +1,21 @@
 spring:
   application:
     name: Doro-ERP-Service
+  jpa:
+    hibernate:
+      # 스키마는 Flyway가 관리하고 JPA는 매핑 검증만 수행한다
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          # DB 저장 시각은 UTC로 통일한다
+          time_zone: UTC
+  flyway:
+    enabled: true
+
+doro:
+  store:
+    bootstrap:
+      # 매장 기본 설정 초기화 Runner 실행 여부
+      enabled: true

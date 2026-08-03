@@ -113,6 +113,43 @@ class ProductTest {
     }
 
     @Nested
+    @DisplayName("changeSalesPolicy")
+    class ChangeSalesPolicy {
+
+        @Test
+        @DisplayName("salesEnabled·stockManaged만 바꾸고 나머지 필드는 그대로다")
+        void changesOnlyPolicyFields() {
+            Product original = product();
+
+            Product updated = original.changeSalesPolicy(false, true);
+
+            assertThat(updated.salesEnabled()).isFalse();
+            assertThat(updated.stockManaged()).isTrue();
+            assertThat(updated.name()).isEqualTo(original.name());
+            assertThat(updated.soldOut()).isEqualTo(original.soldOut());
+            assertThat(updated.version()).isEqualTo(original.version());
+        }
+    }
+
+    @Nested
+    @DisplayName("changeSoldOut")
+    class ChangeSoldOut {
+
+        @Test
+        @DisplayName("soldOut만 바꾸고 나머지 필드는 그대로다")
+        void changesOnlySoldOut() {
+            Product original = product();
+
+            Product soldOut = original.changeSoldOut(true);
+
+            assertThat(soldOut.soldOut()).isTrue();
+            assertThat(soldOut.salesEnabled()).isEqualTo(original.salesEnabled());
+            assertThat(soldOut.stockManaged()).isEqualTo(original.stockManaged());
+            assertThat(soldOut.version()).isEqualTo(original.version());
+        }
+    }
+
+    @Nested
     @DisplayName("replaceOptions")
     class ReplaceOptions {
 

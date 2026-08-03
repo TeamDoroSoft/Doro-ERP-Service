@@ -55,7 +55,7 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                                 + ", 현재 version="
                                 + entity.getVersion());
             }
-            entity.applyBasicInfo(
+            entity.applyState(
                     product.categoryId(),
                     product.mediaId(),
                     product.name(),
@@ -63,6 +63,7 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                     product.basePrice(),
                     product.imageAltText(),
                     product.salesEnabled(),
+                    product.soldOut(),
                     product.stockManaged(),
                     product.displayOrder());
             entity.replaceOptions(toEntities(product.options()));

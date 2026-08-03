@@ -116,7 +116,14 @@ class ProductEntity {
         this.updatedAt = Instant.now();
     }
 
-    void applyBasicInfo(
+    /**
+     * Product 도메인 객체가 담은 모든 변경 가능 필드를 엔티티에 반영한다.
+     * 특정 필드 조합용 부분 Setter를 두지 않는 이유는, 도메인 Product가 항상 "저장돼야 할
+     * 최종 상태 전체"를 담은 불변 객체이기 때문이다 — 일부 Use Case(예: 이름 변경)만 값을
+     * 바꾼 새 Product를 만들어 넘기더라도, 그 안에는 바뀌지 않은 필드의 현재 값도 그대로
+     * 채워져 있으므로 여기서 전체를 다시 쓰는 것이 항상 안전하고 필드 누락을 원천 차단한다.
+     */
+    void applyState(
             UUID categoryId,
             UUID mediaId,
             String name,
@@ -124,6 +131,7 @@ class ProductEntity {
             long basePrice,
             String imageAltText,
             boolean salesEnabled,
+            boolean soldOut,
             boolean stockManaged,
             int displayOrder) {
         this.categoryId = categoryId;
@@ -133,6 +141,7 @@ class ProductEntity {
         this.basePrice = basePrice;
         this.imageAltText = imageAltText;
         this.salesEnabled = salesEnabled;
+        this.soldOut = soldOut;
         this.stockManaged = stockManaged;
         this.displayOrder = displayOrder;
     }

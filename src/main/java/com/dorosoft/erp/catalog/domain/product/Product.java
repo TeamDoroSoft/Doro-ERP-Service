@@ -92,6 +92,27 @@ public record Product(
     }
 
     /**
+     * 판매 활성화와 재고 관리 대상 여부를 바꾼다(FR-MENU-005, 007).
+     * Inventory 초기화·기존 Balance 재사용·Alert 해결은 이 메서드가 다루지 않는다.
+     * Composition Root의 StockManagementPolicyCoordinator가 Catalog·Inventory를 조정하며,
+     * 이 메서드는 그 조정 대상인 Catalog 쪽 절반(salesEnabled·stockManaged 값 자체)만 담당한다.
+     */
+    public Product changeSalesPolicy(boolean salesEnabled, boolean stockManaged) {
+        return new Product(
+                productId, catalogId, categoryId, mediaId, name, description, basePrice, imageAltText,
+                salesEnabled, soldOut, stockManaged, displayOrder, version, createdAt, updatedAt, options,
+                idempotencyKey, idempotencyRequestHash);
+    }
+
+    /** 수동 품절을 설정·해제한다(FR-MENU-006). */
+    public Product changeSoldOut(boolean soldOut) {
+        return new Product(
+                productId, catalogId, categoryId, mediaId, name, description, basePrice, imageAltText,
+                salesEnabled, soldOut, stockManaged, displayOrder, version, createdAt, updatedAt, options,
+                idempotencyKey, idempotencyRequestHash);
+    }
+
+    /**
      * 옵션을 전체 교체한다. 새 Option은 optionId가 null이며 서버가 새로 부여한다.
      * 기존 Option ID는 모두 요청에 포함돼야 하고(누락 시 거부), 다른 Product Option ID나
      * 존재하지 않는 ID, 중복 ID는 거부한다. 배열 순서대로 displayOrder를 부여한다.

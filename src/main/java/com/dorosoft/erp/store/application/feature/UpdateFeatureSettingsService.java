@@ -16,7 +16,7 @@ import com.dorosoft.erp.store.application.port.StoreSettingsRepository;
 import com.dorosoft.erp.store.domain.feature.FeatureCode;
 import com.dorosoft.erp.store.domain.feature.FeatureSettings;
 import com.dorosoft.erp.store.domain.settings.StoreSettings;
-import com.dorosoft.erp.store.presentation.dto.StoreSettingsWebMapper;
+import com.dorosoft.erp.store.application.dto.StoreSettingsWebMapper;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;

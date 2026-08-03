@@ -1,4 +1,4 @@
-package com.dorosoft.erp.store.presentation.dto;
+package com.dorosoft.erp.store.application.dto;
 
 import com.dorosoft.erp.store.domain.feature.FeatureSettings;
 import com.dorosoft.erp.store.domain.schedule.BusinessPeriod;

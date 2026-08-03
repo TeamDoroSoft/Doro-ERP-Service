@@ -1,4 +1,4 @@
-package com.dorosoft.erp.store.presentation.dto;
+package com.dorosoft.erp.store.application.dto;
 
 import java.util.List;
 import java.util.Map;

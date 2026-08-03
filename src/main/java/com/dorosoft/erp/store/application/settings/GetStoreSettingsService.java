@@ -2,8 +2,8 @@ package com.dorosoft.erp.store.application.settings;
 
 import com.dorosoft.erp.store.application.exception.StoreNotInitializedException;
 import com.dorosoft.erp.store.application.port.StoreSettingsRepository;
-import com.dorosoft.erp.store.presentation.dto.StoreSettingsResponse;
-import com.dorosoft.erp.store.presentation.dto.StoreSettingsWebMapper;
+import com.dorosoft.erp.store.application.dto.StoreSettingsResponse;
+import com.dorosoft.erp.store.application.dto.StoreSettingsWebMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

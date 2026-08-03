@@ -85,20 +85,21 @@ class UpdateScheduleIntegrationTest {
 
     @ParameterizedTest
     @MethodSource("invalidBodies")
-    void rejectsInvalidSchedules(String body, String code) throws Exception {
+    void rejectsInvalidSchedules(String body, String code, String field) throws Exception {
         update(body, "store.settings.update", String.valueOf(initialVersion))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(code));
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value(field));
         assertScheduleUnchanged();
     }
 
     static java.util.stream.Stream<Arguments> invalidBodies() {
         return java.util.stream.Stream.of(
-                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"09:00\"}]", "[]", "[]", "{}"), "VALIDATION_FAILED"),
-                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"},{\"start\":\"13:00\",\"end\":\"18:00\"}]", "[]", "[]", "{}"), "OVERLAPPING_BUSINESS_HOURS"),
-                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[]", "[]", "{\"ORDER\":{\"MONDAY\":[{\"start\":\"08:00\",\"end\":\"10:00\"}]}}"), "SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS"),
-                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[\"MONDAY\"]", "[]", "{}"), "CLOSED_DAY_HAS_BUSINESS_HOURS"),
-                Arguments.of(body("[]", "[]", "[{\"date\":\"2026-08-15\",\"reason\":\"점검\"},{\"date\":\"2026-08-15\",\"reason\":\"휴무\"}]", "{}"), "DUPLICATE_TEMPORARY_CLOSURE"));
+                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"09:00\"}]", "[]", "[]", "{}"), "VALIDATION_FAILED", "businessHours.MONDAY[0]"),
+                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"},{\"start\":\"13:00\",\"end\":\"18:00\"}]", "[]", "[]", "{}"), "OVERLAPPING_BUSINESS_HOURS", "businessHours.MONDAY"),
+                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[]", "[]", "{\"ORDER\":{\"MONDAY\":[{\"start\":\"08:00\",\"end\":\"10:00\"}]}}"), "SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS", "serviceWindows.ORDER.MONDAY"),
+                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[\"MONDAY\"]", "[]", "{}"), "CLOSED_DAY_HAS_BUSINESS_HOURS", "businessHours.MONDAY"),
+                Arguments.of(body("[]", "[]", "[{\"date\":\"2026-08-15\",\"reason\":\"점검\"},{\"date\":\"2026-08-15\",\"reason\":\"휴무\"}]", "{}"), "DUPLICATE_TEMPORARY_CLOSURE", "temporaryClosures"));
     }
 
     @Test

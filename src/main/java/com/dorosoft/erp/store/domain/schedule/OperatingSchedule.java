@@ -163,7 +163,7 @@ public final class OperatingSchedule {
     }
 
     /** groupId는 하나의 원본 구간에서 쪼개진 조각을 묶는 식별자다. */
-    private record LabeledSegment(int groupId, String label, Segment segment) {}
+    private record LabeledSegment(int groupId, DayOfWeek day, String label, Segment segment) {}
 
     private static int startOffset(DayOfWeek day, LocalTime start) {
         return (day.getValue() - 1) * SECONDS_PER_DAY + start.toSecondOfDay();
@@ -196,7 +196,7 @@ public final class OperatingSchedule {
             for (BusinessPeriod period : entry.getValue()) {
                 String label = day + " " + period.start() + "~" + period.end();
                 for (Segment segment : normalizeWeeklyIntervals(day, period.start(), period.end())) {
-                    segments.add(new LabeledSegment(groupId, label, segment));
+                    segments.add(new LabeledSegment(groupId, day, label, segment));
                 }
                 groupId++;
             }
@@ -215,6 +215,7 @@ public final class OperatingSchedule {
                 if (left.segment().overlaps(right.segment())) {
                     throw new OperatingScheduleViolationException(
                             OperatingScheduleViolationException.Reason.OVERLAPPING_BUSINESS_HOURS,
+                            "businessHours." + left.day(),
                             "영업 구간이 서로 겹칩니다: " + left.label() + " / " + right.label());
                 }
             }
@@ -233,6 +234,7 @@ public final class OperatingSchedule {
                     throw new OperatingScheduleViolationException(
                             OperatingScheduleViolationException.Reason
                                     .SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS,
+                            "serviceWindows." + window.serviceType() + "." + window.dayOfWeek(),
                             "서비스 구간이 영업시간을 벗어납니다: "
                                     + window.serviceType()
                                     + " "
@@ -283,12 +285,14 @@ public final class OperatingSchedule {
         if (!violations.isEmpty()) {
             throw new OperatingScheduleViolationException(
                     OperatingScheduleViolationException.Reason.CLOSED_DAY_HAS_BUSINESS_HOURS,
+                    "businessHours." + violations.iterator().next(),
                     "정기 휴무 요일에 영업 구간이 존재합니다: " + violations);
         }
         for (ServiceWindow window : serviceWindows) {
             if (regularClosedDays.contains(window.dayOfWeek())) {
                 throw new OperatingScheduleViolationException(
                         OperatingScheduleViolationException.Reason.CLOSED_DAY_HAS_BUSINESS_HOURS,
+                        "serviceWindows." + window.serviceType() + "." + window.dayOfWeek(),
                         "정기 휴무 요일에 서비스 구간이 존재합니다: "
                                 + window.serviceType()
                                 + " "
@@ -303,6 +307,7 @@ public final class OperatingSchedule {
             if (!dates.add(closure.date())) {
                 throw new OperatingScheduleViolationException(
                         OperatingScheduleViolationException.Reason.DUPLICATE_TEMPORARY_CLOSURE,
+                        "temporaryClosures",
                         "임시 휴무 날짜가 중복됩니다: " + closure.date());
             }
         }

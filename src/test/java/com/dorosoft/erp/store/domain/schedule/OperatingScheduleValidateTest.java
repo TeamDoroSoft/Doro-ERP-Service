@@ -38,11 +38,13 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .OVERLAPPING_BUSINESS_HOURS))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .OVERLAPPING_BUSINESS_HOURS);
+                            assertThat(exception.field()).isEqualTo("businessHours.MONDAY");
+                        })
                 .hasMessageContaining("영업 구간이 서로 겹칩니다");
     }
 
@@ -61,11 +63,13 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .OVERLAPPING_BUSINESS_HOURS))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .OVERLAPPING_BUSINESS_HOURS);
+                            assertThat(exception.field()).isEqualTo("businessHours.MONDAY");
+                        })
                 .hasMessageContaining("영업 구간이 서로 겹칩니다");
     }
 
@@ -82,11 +86,14 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS);
+                            assertThat(exception.field())
+                                    .isEqualTo("serviceWindows.ORDER.MONDAY");
+                        })
                 .hasMessageContaining("서비스 구간이 영업시간을 벗어납니다");
     }
 
@@ -117,11 +124,13 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .CLOSED_DAY_HAS_BUSINESS_HOURS))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .CLOSED_DAY_HAS_BUSINESS_HOURS);
+                            assertThat(exception.field()).isEqualTo("businessHours.SUNDAY");
+                        })
                 .hasMessageContaining("정기 휴무 요일에 영업 구간이 존재합니다");
     }
 
@@ -140,11 +149,14 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .CLOSED_DAY_HAS_BUSINESS_HOURS))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .CLOSED_DAY_HAS_BUSINESS_HOURS);
+                            assertThat(exception.field())
+                                    .isEqualTo("serviceWindows.ORDER.SUNDAY");
+                        })
                 .hasMessageContaining("정기 휴무 요일에 서비스 구간이 존재합니다");
     }
 
@@ -164,11 +176,13 @@ class OperatingScheduleValidateTest {
         assertThatThrownBy(schedule::validate)
                 .isInstanceOfSatisfying(
                         OperatingScheduleViolationException.class,
-                        exception ->
-                                assertThat(exception.reason())
-                                        .isEqualTo(
-                                                OperatingScheduleViolationException.Reason
-                                                        .DUPLICATE_TEMPORARY_CLOSURE))
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .DUPLICATE_TEMPORARY_CLOSURE);
+                            assertThat(exception.field()).isEqualTo("temporaryClosures");
+                        })
                 .hasMessageContaining("임시 휴무 날짜가 중복됩니다");
     }
 

@@ -11,13 +11,19 @@ public final class OperatingScheduleViolationException extends RuntimeException 
     }
 
     private final Reason reason;
+    private final String field;
 
-    public OperatingScheduleViolationException(Reason reason, String message) {
+    public OperatingScheduleViolationException(Reason reason, String field, String message) {
         super(message);
         this.reason = reason;
+        this.field = field;
     }
 
     public Reason reason() {
         return reason;
+    }
+
+    public String field() {
+        return field;
     }
 }

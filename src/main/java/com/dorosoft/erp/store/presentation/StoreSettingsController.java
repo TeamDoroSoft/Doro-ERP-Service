@@ -3,16 +3,19 @@ package com.dorosoft.erp.store.presentation;
 import com.dorosoft.erp.platform.web.ApiResponse;
 import com.dorosoft.erp.platform.web.RequestIdFilter;
 import com.dorosoft.erp.shared.security.ActorContextProvider;
+import com.dorosoft.erp.store.application.feature.UpdateFeatureSettingsService;
 import com.dorosoft.erp.store.application.profile.UpdateStoreProfileService;
 import com.dorosoft.erp.store.application.schedule.UpdateOperatingScheduleService;
 import com.dorosoft.erp.store.application.settings.GetStoreSettingsService;
 import com.dorosoft.erp.store.domain.settings.StoreSettings;
+import com.dorosoft.erp.store.presentation.dto.StoreFeatureSettingsUpdateResponse;
 import com.dorosoft.erp.store.presentation.dto.StoreProfileUpdateResponse;
 import com.dorosoft.erp.store.presentation.dto.StoreScheduleUpdateResponse;
 import com.dorosoft.erp.store.presentation.dto.StoreSettingsResponse;
 import com.dorosoft.erp.store.presentation.dto.StoreSettingsWebMapper;
-import com.dorosoft.erp.store.presentation.dto.UpdateStoreProfileRequest;
+import com.dorosoft.erp.store.presentation.dto.UpdateFeatureSettingsRequest;
 import com.dorosoft.erp.store.presentation.dto.UpdateScheduleRequest;
+import com.dorosoft.erp.store.presentation.dto.UpdateStoreProfileRequest;
 import com.dorosoft.erp.store.presentation.exception.IfMatchMissingOrInvalidException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -30,17 +33,35 @@ public class StoreSettingsController {
     private final GetStoreSettingsService getStoreSettingsService;
     private final UpdateStoreProfileService updateStoreProfileService;
     private final UpdateOperatingScheduleService updateOperatingScheduleService;
+    private final UpdateFeatureSettingsService updateFeatureSettingsService;
     private final ActorContextProvider actorContextProvider;
 
     public StoreSettingsController(
             GetStoreSettingsService getStoreSettingsService,
             UpdateStoreProfileService updateStoreProfileService,
             UpdateOperatingScheduleService updateOperatingScheduleService,
+            UpdateFeatureSettingsService updateFeatureSettingsService,
             ActorContextProvider actorContextProvider) {
         this.getStoreSettingsService = getStoreSettingsService;
         this.updateStoreProfileService = updateStoreProfileService;
         this.updateOperatingScheduleService = updateOperatingScheduleService;
+        this.updateFeatureSettingsService = updateFeatureSettingsService;
         this.actorContextProvider = actorContextProvider;
+    }
+
+    @PutMapping("/features")
+    public ApiResponse<StoreFeatureSettingsUpdateResponse> updateFeatures(
+            @RequestHeader(value = "If-Match", required = false) String ifMatch,
+            @Valid @RequestBody UpdateFeatureSettingsRequest request,
+            HttpServletRequest servletRequest) {
+        long requestedVersion = parseIfMatch(ifMatch);
+        String requestId = requestId(servletRequest);
+        StoreSettings saved = updateFeatureSettingsService.update(
+                request.toCommand(requestedVersion), actorContextProvider.currentActor(), requestId);
+        return new ApiResponse<>(
+                new StoreFeatureSettingsUpdateResponse(
+                        StoreSettingsWebMapper.toFeatureResponse(saved.features()), saved.version()),
+                requestId);
     }
 
     @PutMapping("/schedule")

@@ -1,4 +1,4 @@
-package com.dorosoft.erp.store.application.port.audit;
+package com.dorosoft.erp.audit.application.api;
 
 /**
  * 감사 기록 계약. 공개 HTTP Write API는 없고 생산 모듈이 자신의 Transaction 안에서 호출한다.

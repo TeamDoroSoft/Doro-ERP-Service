@@ -139,6 +139,20 @@ class StoreProfileEntity {
         this.timeZone = timeZone;
     }
 
+    /**
+     * 일정 자식 4종을 모두 비운다.
+     *
+     * <p>일정 자식은 저장할 때마다 대리키를 새로 만들어 delete-then-insert로 교체된다. Hibernate는 한 번의 flush 안에서 INSERT를
+     * orphan DELETE보다 먼저 실행할 수 있어, 이전 행과 자연키(uk_business_hour_slot 등)가 겹치면 UNIQUE 위반이 난다. 삭제만 먼저
+     * flush하기 위한 진입점이다.
+     */
+    void clearSchedule() {
+        this.businessHours.clear();
+        this.temporaryClosures.clear();
+        this.serviceWindows.clear();
+        this.regularClosedDays.clear();
+    }
+
     // 전체 교체. orphanRemoval이 동작하도록 컬렉션 참조는 유지하고 내용만 갈아끼운다.
     void replaceBusinessHours(List<BusinessHourEntity> replacements) {
         this.businessHours.clear();

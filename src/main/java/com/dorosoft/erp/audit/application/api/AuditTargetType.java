@@ -1,4 +1,4 @@
-package com.dorosoft.erp.store.application.port.audit;
+package com.dorosoft.erp.audit.application.api;
 
 /** 감사 대상 Aggregate 종류. 감사 기록 계약 명세의 허용값 전체. */
 public enum AuditTargetType {

@@ -1,4 +1,4 @@
-package com.dorosoft.erp.store.application.port.audit;
+package com.dorosoft.erp.audit.application.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;

@@ -77,6 +77,13 @@ public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepositor
             }
             entity.applyProfile(
                     profile.name(), profile.address(), profile.contact(), profile.timeZone().getId());
+
+            // 일정 자식은 매번 대리키를 새로 만들어 통째로 교체하므로 delete-then-insert가 된다.
+            // Hibernate는 한 flush 안에서 INSERT를 orphan DELETE보다 먼저 내보낼 수 있어,
+            // 새 일정이 이전 일정과 자연키(uk_business_hour_slot 등)를 공유하면 UNIQUE 위반으로 저장이 실패한다.
+            // 삭제만 먼저 flush해 DELETE가 반드시 INSERT보다 앞서게 한다. (신규 매장은 지울 행이 없어 불필요)
+            entity.clearSchedule();
+            jpaRepository.flush();
         }
 
         applySchedule(entity, settings.storeId(), settings.schedule());

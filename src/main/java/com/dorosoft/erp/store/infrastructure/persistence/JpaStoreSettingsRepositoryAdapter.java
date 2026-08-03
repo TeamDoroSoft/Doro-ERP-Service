@@ -10,6 +10,7 @@ import com.dorosoft.erp.store.domain.schedule.ServiceWindow;
 import com.dorosoft.erp.store.domain.schedule.TemporaryClosure;
 import com.dorosoft.erp.store.domain.settings.StoreProfile;
 import com.dorosoft.erp.store.domain.settings.StoreSettings;
+import jakarta.persistence.EntityManager;
 import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -29,9 +30,12 @@ import org.springframework.stereotype.Repository;
 public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepository {
 
     private final StoreProfileJpaRepository jpaRepository;
+    private final EntityManager entityManager;
 
-    public JpaStoreSettingsRepositoryAdapter(StoreProfileJpaRepository jpaRepository) {
+    public JpaStoreSettingsRepositoryAdapter(
+            StoreProfileJpaRepository jpaRepository, EntityManager entityManager) {
         this.jpaRepository = jpaRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -75,15 +79,13 @@ public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepositor
                                 + ", 현재 version="
                                 + entity.getVersion());
             }
+            // 일정 자식은 매번 대리키를 새로 만들어 통째로 교체하므로 delete-then-insert가 된다.
+            // 새 일정 INSERT보다 기존 일정 DELETE가 먼저 실행되도록 자식 행만 즉시 삭제한다.
+            // 프로필을 변경하기 전에 실행하므로 이 과정에서는 store_profile UPDATE가 발생하지 않는다.
+            deleteScheduleRows(settings.storeId());
+
             entity.applyProfile(
                     profile.name(), profile.address(), profile.contact(), profile.timeZone().getId());
-
-            // 일정 자식은 매번 대리키를 새로 만들어 통째로 교체하므로 delete-then-insert가 된다.
-            // Hibernate는 한 flush 안에서 INSERT를 orphan DELETE보다 먼저 내보낼 수 있어,
-            // 새 일정이 이전 일정과 자연키(uk_business_hour_slot 등)를 공유하면 UNIQUE 위반으로 저장이 실패한다.
-            // 삭제만 먼저 flush해 DELETE가 반드시 INSERT보다 앞서게 한다. (신규 매장은 지울 행이 없어 불필요)
-            entity.clearSchedule();
-            jpaRepository.flush();
         }
 
         applySchedule(entity, settings.storeId(), settings.schedule());
@@ -96,6 +98,20 @@ public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepositor
                 settings.schedule(),
                 settings.features(),
                 saved.getVersion());
+    }
+
+    private void deleteScheduleRows(UUID storeId) {
+        deleteScheduleRows("business_hour", storeId);
+        deleteScheduleRows("temporary_closure", storeId);
+        deleteScheduleRows("service_window", storeId);
+        deleteScheduleRows("regular_closed_day", storeId);
+    }
+
+    private void deleteScheduleRows(String tableName, UUID storeId) {
+        entityManager
+                .createNativeQuery("DELETE FROM " + tableName + " WHERE store_id = :storeId")
+                .setParameter("storeId", storeId)
+                .executeUpdate();
     }
 
     // --- Domain -> Entity ----------------------------------------------------

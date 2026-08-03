@@ -15,6 +15,8 @@ spring:
     enabled: true
 
 doro:
+  audit:
+    hmac-secret: ${DORO_AUDIT_HMAC_SECRET:local-dev-only-change-me-32bytes-min}
   store:
     bootstrap:
       # 매장 기본 설정 초기화 Runner 실행 여부

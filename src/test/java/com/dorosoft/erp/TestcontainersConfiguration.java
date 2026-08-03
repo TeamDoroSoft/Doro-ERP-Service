@@ -13,7 +13,8 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     MySQLContainer mysqlContainer() {
-        return new MySQLContainer(DockerImageName.parse("mysql:latest"));
+        return new MySQLContainer(DockerImageName.parse("mysql:latest"))
+                .withUrlParam("connectionTimeZone", "UTC");
     }
 
     @Bean

@@ -84,6 +84,20 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
         return jpaRepository.findByIdempotencyKey(idempotencyKey).map(JpaProductRepositoryAdapter::toDomain);
     }
 
+    @Override
+    public List<Product> findByCategory(UUID categoryId) {
+        return jpaRepository.findByCategoryIdOrderByDisplayOrderAsc(categoryId).stream()
+                .map(JpaProductRepositoryAdapter::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Product> findAll() {
+        return jpaRepository.findAllByOrderByCreatedAtAscProductIdAsc().stream()
+                .map(JpaProductRepositoryAdapter::toDomain)
+                .toList();
+    }
+
     private static List<ProductOptionEntity> toEntities(List<ProductOption> options) {
         return options.stream()
                 .map(o -> new ProductOptionEntity(o.optionId(), o.name(), o.additionalPrice(), o.enabled(), o.displayOrder()))

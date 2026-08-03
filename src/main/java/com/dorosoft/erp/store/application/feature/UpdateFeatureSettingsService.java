@@ -13,6 +13,7 @@ import com.dorosoft.erp.store.application.exception.InvalidSettingCodeException;
 import com.dorosoft.erp.store.application.exception.StoreNotInitializedException;
 import com.dorosoft.erp.store.application.exception.StoreSettingsVersionConflictException;
 import com.dorosoft.erp.store.application.port.StoreSettingsRepository;
+import com.dorosoft.erp.store.domain.feature.FeatureCode;
 import com.dorosoft.erp.store.domain.feature.FeatureSettings;
 import com.dorosoft.erp.store.domain.settings.StoreSettings;
 import com.dorosoft.erp.store.presentation.dto.StoreSettingsWebMapper;
@@ -55,11 +56,9 @@ public class UpdateFeatureSettingsService {
         try {
             after = FeatureSettings.of(command.customerFeatures(), command.notificationEvents());
         } catch (IllegalArgumentException exception) {
-            String field = exception.getMessage().startsWith("notificationEvents")
-                    ? "notificationEvents"
-                    : "customerFeatures";
             throw new InvalidSettingCodeException(
-                    exception.getMessage(), List.of(new FieldError(field, "MISSING_SETTING_CODE")));
+                    exception.getMessage(),
+                    List.of(new FieldError(missingField(command), "MISSING_SETTING_CODE")));
         }
         current.replaceFeatures(after);
         StoreSettings saved = repository.save(current);
@@ -83,6 +82,16 @@ public class UpdateFeatureSettingsService {
                         "1"),
                 new AuditContext(actor.actorId(), actor.actorRole(), clock.instant(), requestId));
         return saved;
+    }
+
+    /** FeatureSettings.of()가 customerFeatures를 notificationEvents보다 먼저 검증하므로 같은 순서로 확인한다. */
+    private static String missingField(UpdateFeatureSettingsCommand command) {
+        for (FeatureCode code : FeatureCode.values()) {
+            if (command.customerFeatures().get(code) == null) {
+                return "customerFeatures";
+            }
+        }
+        return "notificationEvents";
     }
 
     private String toJson(FeatureSettings features) {

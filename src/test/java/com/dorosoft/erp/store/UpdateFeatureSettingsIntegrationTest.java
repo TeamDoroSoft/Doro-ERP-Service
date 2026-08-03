@@ -105,6 +105,28 @@ class UpdateFeatureSettingsIntegrationTest {
     }
 
     @Test
+    void missingCustomerFeatureCodeReportsCustomerFeaturesField() throws Exception {
+        update(
+                        body("\"WAITING\":false,\"RESERVATION\":false,\"QR_ORDER\":false", notificationEvents()),
+                        "store.settings.update",
+                        String.valueOf(initialVersion))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SETTING_CODE"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("customerFeatures"));
+    }
+
+    @Test
+    void missingNotificationEventCodeReportsNotificationEventsField() throws Exception {
+        update(
+                        body(customerFeatures(), notificationEventsWithoutPaymentCancelled()),
+                        "store.settings.update",
+                        String.valueOf(initialVersion))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SETTING_CODE"))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("notificationEvents"));
+    }
+
+    @Test
     void missingIfMatchReturns400() throws Exception {
         mockMvc.perform(put("/api/v1/store-settings/features")
                         .headers(actorHeaders("store.settings.update"))

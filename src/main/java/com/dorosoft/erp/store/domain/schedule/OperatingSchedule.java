@@ -133,20 +133,55 @@ public final class OperatingSchedule {
         return false;
     }
 
-    private boolean isClosedOn(LocalDate date) {
-        if (regularClosedDays.contains(date.getDayOfWeek())) {
-            return true;
+    public boolean isRegularlyClosed(DayOfWeek dayOfWeek) {
+        return regularClosedDays.contains(
+                Objects.requireNonNull(dayOfWeek, "dayOfWeek는 null일 수 없습니다"));
+    }
+
+    public boolean isTemporarilyClosed(LocalDate date) {
+        Objects.requireNonNull(date, "date는 null일 수 없습니다");
+        return temporaryClosures.stream().anyMatch(closure -> closure.date().equals(date));
+    }
+
+    public boolean isServiceOpen(ServiceType serviceType, Instant instant, ZoneId zone) {
+        Objects.requireNonNull(serviceType, "serviceType은 null일 수 없습니다");
+        Objects.requireNonNull(instant, "instant는 null일 수 없습니다");
+        Objects.requireNonNull(zone, "zone은 null일 수 없습니다");
+
+        LocalDate today = instant.atZone(zone).toLocalDate();
+        if (isClosedOn(today)) {
+            return false;
         }
-        for (TemporaryClosure closure : temporaryClosures) {
-            if (closure.date().equals(date)) {
+        for (ServiceWindow window : serviceWindowsOf(serviceType, today.getDayOfWeek())) {
+            if (window.toInterval(today, zone).contains(instant)) {
+                return true;
+            }
+        }
+
+        LocalDate yesterday = today.minusDays(1);
+        if (isClosedOn(yesterday)) {
+            return false;
+        }
+        for (ServiceWindow window : serviceWindowsOf(serviceType, yesterday.getDayOfWeek())) {
+            if (window.crossesMidnight() && window.toInterval(yesterday, zone).contains(instant)) {
                 return true;
             }
         }
         return false;
     }
 
+    private boolean isClosedOn(LocalDate date) {
+        return isRegularlyClosed(date.getDayOfWeek()) || isTemporarilyClosed(date);
+    }
+
     private List<BusinessPeriod> periodsOf(DayOfWeek day) {
         return businessHours.getOrDefault(day, List.of());
+    }
+
+    private List<ServiceWindow> serviceWindowsOf(ServiceType serviceType, DayOfWeek day) {
+        return serviceWindows.stream()
+                .filter(window -> window.serviceType() == serviceType && window.dayOfWeek() == day)
+                .toList();
     }
 
     // --- 주간 정규화 ---------------------------------------------------------

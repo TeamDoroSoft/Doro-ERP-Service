@@ -132,8 +132,11 @@ class AvailabilityPolicyTest {
                 settings(schedule, Set.of(FeatureCode.WAITING), zone), FeatureCode.WAITING,
                 at(zone, transitionDay, 1, 59));
 
+        // 02:30 is shifted forward by the one-hour gap to 03:30 EDT (07:30Z), not to 03:00.
+        // BusinessPeriod.toInterval() uses the same Java default gap resolution, so the actual
+        // business-opening boundary is also 03:30 EDT.
         assertThat(result.nextAvailableAt())
-                .isEqualTo(ZonedDateTime.of(transitionDay, LocalTime.of(2, 30), zone).toInstant());
+                .isEqualTo(Instant.parse("2026-03-08T07:30:00Z"));
     }
 
     @Test
@@ -159,22 +162,20 @@ class AvailabilityPolicyTest {
     @Test
     void overlapSearchChoosesEarliestCandidateAfterReferenceInstant() {
         ZoneId zone = ZoneId.of("America/New_York");
-        LocalDate transitionDay = LocalDate.of(2026, 11, 1);
-        LocalTime start = LocalTime.of(1, 30);
         OperatingSchedule schedule =
                 OperatingSchedule.of(
-                        Map.of(DayOfWeek.SUNDAY, List.of(period(1, 30, 2, 0))),
+                        Map.of(
+                                DayOfWeek.SUNDAY,
+                                List.of(period(1, 0, 1, 15), period(1, 45, 2, 0))),
                         Set.of(), Set.of(), Set.of());
         StoreSettings settings = settings(schedule, Set.of(FeatureCode.WAITING), zone);
-        ZonedDateTime reference =
-                ZonedDateTime.of(transitionDay, LocalTime.of(0, 45), zone);
-        Instant expected = ZonedDateTime.of(transitionDay, start, zone).toInstant();
+        Instant reference = Instant.parse("2026-11-01T05:20:00Z");
 
         FeatureAvailability result =
-                policy.evaluate(settings, FeatureCode.WAITING, reference.toInstant());
+                policy.evaluate(settings, FeatureCode.WAITING, reference);
 
         assertThat(result.reason()).isEqualTo(AvailabilityReason.OUTSIDE_BUSINESS_HOURS);
-        assertThat(result.nextAvailableAt()).isEqualTo(expected);
+        assertThat(result.nextAvailableAt()).isEqualTo(Instant.parse("2026-11-01T05:45:00Z"));
     }
 
     private void assertReason(

@@ -95,6 +95,7 @@ public final class OperatingSchedule {
      *   <li>영업 구간끼리 겹치지 않는다.
      *   <li>모든 서비스 구간은 영업시간 합집합에 완전히 포함된다.
      *   <li>정기 휴무 요일에는 영업 구간·서비스 구간이 없다.
+     *   <li>임시 휴무 날짜는 중복되지 않는다.
      * </ol>
      */
     public void validate() {
@@ -102,6 +103,7 @@ public final class OperatingSchedule {
         verifyNoBusinessOverlap(businessSegments);
         verifyServiceWindowsWithinBusinessHours(businessSegments);
         verifyRegularClosedDaysHaveNoPeriod();
+        verifyNoDuplicateTemporaryClosureDates();
     }
 
     public boolean isBusinessOpen(Instant instant, ZoneId zone) {
@@ -211,7 +213,8 @@ public final class OperatingSchedule {
                     continue; // 같은 원본 구간이 쪼개진 조각끼리는 비교하지 않는다
                 }
                 if (left.segment().overlaps(right.segment())) {
-                    throw new IllegalStateException(
+                    throw new OperatingScheduleViolationException(
+                            OperatingScheduleViolationException.Reason.OVERLAPPING_BUSINESS_HOURS,
                             "영업 구간이 서로 겹칩니다: " + left.label() + " / " + right.label());
                 }
             }
@@ -227,7 +230,9 @@ public final class OperatingSchedule {
             for (Segment part :
                     normalizeWeeklyIntervals(window.dayOfWeek(), window.start(), window.end())) {
                 if (union.stream().noneMatch(part::containedIn)) {
-                    throw new IllegalStateException(
+                    throw new OperatingScheduleViolationException(
+                            OperatingScheduleViolationException.Reason
+                                    .SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS,
                             "서비스 구간이 영업시간을 벗어납니다: "
                                     + window.serviceType()
                                     + " "
@@ -276,15 +281,29 @@ public final class OperatingSchedule {
             }
         }
         if (!violations.isEmpty()) {
-            throw new IllegalStateException("정기 휴무 요일에 영업 구간이 존재합니다: " + violations);
+            throw new OperatingScheduleViolationException(
+                    OperatingScheduleViolationException.Reason.CLOSED_DAY_HAS_BUSINESS_HOURS,
+                    "정기 휴무 요일에 영업 구간이 존재합니다: " + violations);
         }
         for (ServiceWindow window : serviceWindows) {
             if (regularClosedDays.contains(window.dayOfWeek())) {
-                throw new IllegalStateException(
+                throw new OperatingScheduleViolationException(
+                        OperatingScheduleViolationException.Reason.CLOSED_DAY_HAS_BUSINESS_HOURS,
                         "정기 휴무 요일에 서비스 구간이 존재합니다: "
                                 + window.serviceType()
                                 + " "
                                 + window.dayOfWeek());
+            }
+        }
+    }
+
+    private void verifyNoDuplicateTemporaryClosureDates() {
+        Set<LocalDate> dates = new LinkedHashSet<>();
+        for (TemporaryClosure closure : temporaryClosures) {
+            if (!dates.add(closure.date())) {
+                throw new OperatingScheduleViolationException(
+                        OperatingScheduleViolationException.Reason.DUPLICATE_TEMPORARY_CLOSURE,
+                        "임시 휴무 날짜가 중복됩니다: " + closure.date());
             }
         }
     }

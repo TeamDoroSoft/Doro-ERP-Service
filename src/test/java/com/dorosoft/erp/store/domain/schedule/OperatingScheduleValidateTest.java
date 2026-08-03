@@ -1,5 +1,6 @@
 package com.dorosoft.erp.store.domain.schedule;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -35,7 +36,13 @@ class OperatingScheduleValidateTest {
                         Set.of());
 
         assertThatThrownBy(schedule::validate)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .OVERLAPPING_BUSINESS_HOURS))
                 .hasMessageContaining("영업 구간이 서로 겹칩니다");
     }
 
@@ -52,7 +59,13 @@ class OperatingScheduleValidateTest {
                         Set.of());
 
         assertThatThrownBy(schedule::validate)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .OVERLAPPING_BUSINESS_HOURS))
                 .hasMessageContaining("영업 구간이 서로 겹칩니다");
     }
 
@@ -67,7 +80,13 @@ class OperatingScheduleValidateTest {
                         Set.of(window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 8, 10)));
 
         assertThatThrownBy(schedule::validate)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS))
                 .hasMessageContaining("서비스 구간이 영업시간을 벗어납니다");
     }
 
@@ -96,7 +115,13 @@ class OperatingScheduleValidateTest {
                         Set.of());
 
         assertThatThrownBy(schedule::validate)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .CLOSED_DAY_HAS_BUSINESS_HOURS))
                 .hasMessageContaining("정기 휴무 요일에 영업 구간이 존재합니다");
     }
 
@@ -113,8 +138,38 @@ class OperatingScheduleValidateTest {
                         Set.of(window(ServiceType.ORDER, DayOfWeek.SUNDAY, 0, 1, 5)));
 
         assertThatThrownBy(schedule::validate)
-                .isInstanceOf(IllegalStateException.class)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .CLOSED_DAY_HAS_BUSINESS_HOURS))
                 .hasMessageContaining("정기 휴무 요일에 서비스 구간이 존재합니다");
+    }
+
+    @Test
+    @DisplayName("같은 날짜의 임시 휴무가 다른 사유로 중복되면 거부한다")
+    void rejectsDuplicateTemporaryClosureDateWithDifferentReasons() {
+        LocalDate date = LocalDate.of(2026, 8, 3);
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(),
+                        Set.of(),
+                        Set.of(
+                                new TemporaryClosure(date, "설비 점검"),
+                                new TemporaryClosure(date, "직원 교육")),
+                        Set.of());
+
+        assertThatThrownBy(schedule::validate)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .DUPLICATE_TEMPORARY_CLOSURE))
+                .hasMessageContaining("임시 휴무 날짜가 중복됩니다");
     }
 
     @Test

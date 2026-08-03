@@ -26,6 +26,8 @@ public class SecurityConfig {
         // ADR-005 실제 세션 인증 구현 시 Redis 기반 CSRF Token 계약으로 교체 예정
         http.csrf(csrf -> csrf.disable());
         http.authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/store/availability")
+                .permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/store-settings")
                 .hasAuthority("store.settings.read")
                 .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/v1/store-settings/profile")

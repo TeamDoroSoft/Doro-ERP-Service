@@ -11,8 +11,10 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -34,6 +36,18 @@ public class GlobalExceptionHandler {
                 "요청 값이 올바르지 않습니다",
                 fieldErrors,
                 request);
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    ResponseEntity<ProblemDetail> handleMissingRequestParameter(
+            MissingServletRequestParameterException exception, HttpServletRequest request) {
+        return validationResponse(exception.getParameterName(), "REQUIRED", request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ProblemDetail> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
+        return validationResponse(exception.getName(), "INVALID", request);
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
@@ -67,6 +81,16 @@ public class GlobalExceptionHandler {
         String requestId = (String) request.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE);
         ProblemDetail body = ProblemDetailFactory.create(status, code, detail, requestId, fieldErrors);
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(body);
+    }
+
+    private ResponseEntity<ProblemDetail> validationResponse(
+            String field, String errorCode, HttpServletRequest request) {
+        return response(
+                HttpStatus.BAD_REQUEST,
+                "VALIDATION_FAILED",
+                "요청 값이 올바르지 않습니다",
+                List.of(new FieldError(field, errorCode)),
+                request);
     }
 
     static String toUpperSnakeCase(String value) {

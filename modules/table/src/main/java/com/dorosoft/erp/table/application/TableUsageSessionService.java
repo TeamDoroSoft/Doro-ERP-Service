@@ -38,6 +38,7 @@ public class TableUsageSessionService {
     private final TableUsageSessionCommandRepository sessionRepository;
     private final TableSessionCloseGuardReader closeGuardReader;
     private final AuditWriter auditWriter;
+    private final TableOperationObservability observability;
     private final Clock clock;
     private final String tenantId;
 
@@ -46,70 +47,122 @@ public class TableUsageSessionService {
             TableUsageSessionCommandRepository sessionRepository,
             TableSessionCloseGuardReader closeGuardReader,
             AuditWriter auditWriter,
+            TableOperationObservability observability,
             Clock clock,
             @Value("${doro.erp.tenant-id:local-store}") String tenantId) {
         this.tableRepository = tableRepository;
         this.sessionRepository = sessionRepository;
         this.closeGuardReader = closeGuardReader;
         this.auditWriter = auditWriter;
+        this.observability = observability;
         this.clock = clock;
         this.tenantId = tenantId;
     }
 
     @Transactional
     public TableUsageSessionResponse start(UUID tableId, StartSessionContext context) {
-        if (!tenantId.equals(context.tenantId())) {
-            throw tableNotFound();
-        }
-        StoreTableEntity table =
-                tableRepository.findByIdForUpdate(tableId).orElseThrow(TableUsageSessionService::tableNotFound);
-        if (!table.isActive()) {
-            throw new TableManagementException(
-                    HttpStatus.CONFLICT,
-                    TableErrorCode.TABLE_SESSION_NOT_AVAILABLE,
-                    "Table session can not be opened.");
-        }
-        if (sessionRepository.existsOpenSession(table.getTableId())) {
-            throw alreadyOpen();
-        }
+        try {
+            if (!tenantId.equals(context.tenantId())) {
+                throw tableNotFound();
+            }
+            StoreTableEntity table =
+                    tableRepository.findByIdForUpdate(tableId).orElseThrow(TableUsageSessionService::tableNotFound);
+            if (!table.isActive()) {
+                throw new TableManagementException(
+                        HttpStatus.CONFLICT,
+                        TableErrorCode.TABLE_SESSION_NOT_AVAILABLE,
+                        "Table session can not be opened.");
+            }
+            if (sessionRepository.existsOpenSession(table.getTableId())) {
+                throw alreadyOpen();
+            }
 
-        TableUsageSessionSnapshot session = openSession(table.getTableId(), context.actorId(), clock.instant());
-        recordAudit(session, context);
-        return toResponse(session);
+            TableUsageSessionSnapshot session = openSession(table.getTableId(), context.actorId(), clock.instant());
+            recordAudit(session, context);
+            observability.success(
+                    "session.start",
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_SESSION",
+                    session.sessionId());
+            return toResponse(session);
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "session.start",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    tableId);
+            throw exception;
+        }
     }
 
     @Transactional
     public TableUsageSessionCloseResponse close(UUID tableId, UUID sessionId, StartSessionContext context) {
-        if (!tenantId.equals(context.tenantId())) {
-            throw tableNotFound();
-        }
-        tableRepository.findByIdForUpdate(tableId).orElseThrow(TableUsageSessionService::tableNotFound);
+        try {
+            if (!tenantId.equals(context.tenantId())) {
+                throw tableNotFound();
+            }
+            tableRepository.findByIdForUpdate(tableId).orElseThrow(TableUsageSessionService::tableNotFound);
 
-        TableUsageSessionSnapshot before =
-                sessionRepository
-                        .findByTableIdAndSessionIdForUpdate(tableId, sessionId)
-                        .orElseThrow(TableUsageSessionService::sessionNotFound);
-        if (!"OPEN".equals(before.status())) {
-            throw alreadyClosed();
-        }
+            TableUsageSessionSnapshot before =
+                    sessionRepository
+                            .findByTableIdAndSessionIdForUpdate(tableId, sessionId)
+                            .orElseThrow(TableUsageSessionService::sessionNotFound);
+            if (!"OPEN".equals(before.status())) {
+                throw alreadyClosed();
+            }
 
-        Instant closedAt = clock.instant();
-        CloseGuardResult guardResult = closeGuardReader.inspect(new CloseGuardQuery(tableId, sessionId, closedAt));
-        if (guardResult == null) {
-            throw closeBlocked(
-                    List.of(
-                            new CloseGuardBlocker(
-                                    "UNKNOWN_ORDER_OR_PAYMENT_STATE",
-                                    "Order or payment state can not be determined.")));
-        }
-        if (!guardResult.canClose()) {
-            throw closeBlocked(guardResult.blockers());
-        }
+            Instant closedAt = clock.instant();
+            CloseGuardResult guardResult = closeGuardReader.inspect(new CloseGuardQuery(tableId, sessionId, closedAt));
+            if (guardResult == null) {
+                throw closeBlocked(
+                        List.of(
+                                new CloseGuardBlocker(
+                                        "UNKNOWN_ORDER_OR_PAYMENT_STATE",
+                                        "Order or payment state can not be determined.")),
+                        before,
+                        context);
+            }
+            if (!guardResult.canClose()) {
+                throw closeBlocked(guardResult.blockers(), before, context);
+            }
 
-        TableUsageSessionSnapshot after =
-                sessionRepository.closeSession(tableId, sessionId, context.actorId(), closedAt, "NORMAL");
-        recordCloseAudit(before, after, context);
-        return toCloseResponse(after);
+            TableUsageSessionSnapshot after =
+                    sessionRepository.closeSession(tableId, sessionId, context.actorId(), closedAt, "NORMAL");
+            recordCloseAudit(before, after, context);
+            observability.success(
+                    "session.close",
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_SESSION",
+                    after.sessionId());
+            return toCloseResponse(after);
+        } catch (TableSessionCloseBlockedException exception) {
+            observability.blocked(
+                    "session.close",
+                    firstBlockerCode(exception.blockers()),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_SESSION",
+                    sessionId);
+            throw exception;
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "session.close",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_SESSION",
+                    sessionId);
+            throw exception;
+        }
     }
 
     private TableUsageSessionSnapshot openSession(UUID tableId, UUID openedBy, Instant openedAt) {
@@ -238,8 +291,18 @@ public class TableUsageSessionService {
                 "Table session is already closed.");
     }
 
-    private static TableSessionCloseBlockedException closeBlocked(List<CloseGuardBlocker> blockers) {
-        return new TableSessionCloseBlockedException(blockers);
+    private static TableSessionCloseBlockedException closeBlocked(
+            List<CloseGuardBlocker> blockers,
+            TableUsageSessionSnapshot session,
+            StartSessionContext context) {
+        return new TableSessionCloseBlockedException(blockers, session, context);
+    }
+
+    private static String firstBlockerCode(List<CloseGuardBlocker> blockers) {
+        if (blockers == null || blockers.isEmpty()) {
+            return "TABLE_SESSION_CLOSE_BLOCKED";
+        }
+        return blockers.getFirst().code();
     }
 
     public record StartSessionContext(

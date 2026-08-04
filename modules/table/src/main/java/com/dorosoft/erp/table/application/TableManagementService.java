@@ -1,14 +1,25 @@
 package com.dorosoft.erp.table.application;
 
+import com.dorosoft.erp.audit.application.api.AuditContext;
+import com.dorosoft.erp.audit.application.api.AuditRecordCommand;
+import com.dorosoft.erp.audit.application.api.AuditWriter;
+import com.dorosoft.erp.audit.domain.AuditAction;
+import com.dorosoft.erp.audit.domain.AuditDomain;
+import com.dorosoft.erp.audit.domain.AuditPrimaryTarget;
+import com.dorosoft.erp.audit.domain.AuditTargetType;
 import com.dorosoft.erp.table.application.dto.TableResponse;
 import com.dorosoft.erp.table.application.port.TableUsageStatusReader;
 import com.dorosoft.erp.table.domain.TableUsageStatus;
 import com.dorosoft.erp.table.infrastructure.persistence.StoreTableEntity;
 import com.dorosoft.erp.table.infrastructure.persistence.StoreTableJpaRepository;
+import java.time.Clock;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -19,30 +30,70 @@ public class TableManagementService {
 
     private final StoreTableJpaRepository tableRepository;
     private final TableUsageStatusReader usageStatusReader;
+    private final AuditWriter auditWriter;
+    private final TableOperationObservability observability;
+    private final Clock clock;
+    private final String tenantId;
 
     public TableManagementService(
-            StoreTableJpaRepository tableRepository, TableUsageStatusReader usageStatusReader) {
+            StoreTableJpaRepository tableRepository,
+            TableUsageStatusReader usageStatusReader,
+            AuditWriter auditWriter,
+            TableOperationObservability observability,
+            Clock clock,
+            @Value("${doro.erp.tenant-id:local-store}") String tenantId) {
         this.tableRepository = tableRepository;
         this.usageStatusReader = usageStatusReader;
+        this.auditWriter = auditWriter;
+        this.observability = observability;
+        this.clock = clock;
+        this.tenantId = tenantId;
     }
 
     @Transactional
-    public TableResponse create(CreateTableCommand command) {
-        TableDetails details = validate(command.tableNumber(), command.displayName(), command.seatCapacity());
-        ensureNumberAvailable(details.normalizedNumber(), null);
-
-        StoreTableEntity entity =
-                StoreTableEntity.create(
-                        UUID.randomUUID(),
-                        details.tableNumber(),
-                        details.normalizedNumber(),
-                        details.displayName(),
-                        details.seatCapacity(),
-                        command.active());
+    public TableResponse create(CreateTableCommand command, TableOperationContext context) {
         try {
-            return toResponse(tableRepository.saveAndFlush(entity), TableUsageStatus.VACANT);
-        } catch (DataIntegrityViolationException e) {
-            throw duplicatedNumber();
+            TableDetails details = validate(command.tableNumber(), command.displayName(), command.seatCapacity());
+            ensureNumberAvailable(details.normalizedNumber(), null);
+
+            StoreTableEntity entity =
+                    StoreTableEntity.create(
+                            UUID.randomUUID(),
+                            details.tableNumber(),
+                            details.normalizedNumber(),
+                            details.displayName(),
+                            details.seatCapacity(),
+                            command.active());
+            try {
+                StoreTableEntity saved = tableRepository.saveAndFlush(entity);
+                recordTableAudit(
+                        AuditAction.TABLE_CREATED,
+                        saved.getTableId(),
+                        saved.getTableId(),
+                        Map.of(),
+                        tableAuditValue(saved),
+                        context);
+                observability.success(
+                        "table.create",
+                        context.tenantId(),
+                        context.actorId(),
+                        context.requestId(),
+                        "TABLE",
+                        saved.getTableId());
+                return toResponse(saved, TableUsageStatus.VACANT);
+            } catch (DataIntegrityViolationException e) {
+                throw duplicatedNumber();
+            }
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "table.create",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    null);
+            throw exception;
         }
     }
 
@@ -62,37 +113,99 @@ public class TableManagementService {
     }
 
     @Transactional
-    public TableResponse update(UUID tableId, long expectedVersion, UpdateTableCommand command) {
-        StoreTableEntity table = findExisting(tableId);
-        verifyVersion(table, expectedVersion);
-
-        TableDetails details = validate(command.tableNumber(), command.displayName(), command.seatCapacity());
-        ensureNumberAvailable(details.normalizedNumber(), tableId);
-
-        table.applyDetails(
-                details.tableNumber(),
-                details.normalizedNumber(),
-                details.displayName(),
-                details.seatCapacity());
+    public TableResponse update(
+            UUID tableId,
+            long expectedVersion,
+            UpdateTableCommand command,
+            TableOperationContext context) {
         try {
-            StoreTableEntity saved = tableRepository.saveAndFlush(table);
-            return toResponse(saved, usageStatusReader.getUsageStatus(tableId));
-        } catch (DataIntegrityViolationException e) {
-            throw duplicatedNumber();
+            StoreTableEntity table = findExisting(tableId);
+            verifyVersion(table, expectedVersion);
+            Map<String, Object> beforeValue = tableAuditValue(table);
+
+            TableDetails details = validate(command.tableNumber(), command.displayName(), command.seatCapacity());
+            ensureNumberAvailable(details.normalizedNumber(), tableId);
+
+            table.applyDetails(
+                    details.tableNumber(),
+                    details.normalizedNumber(),
+                    details.displayName(),
+                    details.seatCapacity());
+            try {
+                StoreTableEntity saved = tableRepository.saveAndFlush(table);
+                recordTableAudit(
+                        AuditAction.TABLE_UPDATED,
+                        UUID.randomUUID(),
+                        saved.getTableId(),
+                        beforeValue,
+                        tableAuditValue(saved),
+                        context);
+                observability.success(
+                        "table.update",
+                        context.tenantId(),
+                        context.actorId(),
+                        context.requestId(),
+                        "TABLE",
+                        saved.getTableId());
+                return toResponse(saved, usageStatusReader.getUsageStatus(tableId));
+            } catch (DataIntegrityViolationException e) {
+                throw duplicatedNumber();
+            }
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "table.update",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    tableId);
+            throw exception;
         }
     }
 
     @Transactional
-    public TableResponse updateActivation(UUID tableId, long expectedVersion, boolean active) {
-        StoreTableEntity table = findExisting(tableId);
-        verifyVersion(table, expectedVersion);
+    public TableResponse updateActivation(
+            UUID tableId,
+            long expectedVersion,
+            boolean active,
+            TableOperationContext context) {
+        try {
+            StoreTableEntity table = findExisting(tableId);
+            verifyVersion(table, expectedVersion);
+            Map<String, Object> beforeValue = tableActivationAuditValue(table);
+            boolean changed = table.isActive() != active;
 
-        if (table.isActive() != active) {
-            table.applyActive(active);
-            table = tableRepository.saveAndFlush(table);
+            if (changed) {
+                table.applyActive(active);
+                table = tableRepository.saveAndFlush(table);
+                recordTableAudit(
+                        AuditAction.TABLE_ACTIVATION_CHANGED,
+                        UUID.randomUUID(),
+                        table.getTableId(),
+                        beforeValue,
+                        tableActivationAuditValue(table),
+                        context);
+            }
+            observability.success(
+                    active ? "table.activate" : "table.deactivate",
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    table.getTableId());
+            return toResponse(table, usageStatusReader.getUsageStatus(tableId));
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    active ? "table.activate" : "table.deactivate",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    tableId);
+            throw exception;
         }
-
-        return toResponse(table, usageStatusReader.getUsageStatus(tableId));
     }
 
     private StoreTableEntity findExisting(UUID tableId) {
@@ -172,6 +285,52 @@ public class TableManagementService {
                 table.getVersion());
     }
 
+    private void recordTableAudit(
+            AuditAction action,
+            UUID operationId,
+            UUID tableId,
+            Map<String, Object> beforeValue,
+            Map<String, Object> afterValue,
+            TableOperationContext context) {
+        AuditRecordCommand command =
+                AuditRecordCommand.builder()
+                        .domain(AuditDomain.STORE)
+                        .action(action)
+                        .operationId(operationId)
+                        .eventSequence(0)
+                        .primaryTarget(new AuditPrimaryTarget(AuditTargetType.TABLE, tableId))
+                        .beforeValue(beforeValue)
+                        .afterValue(afterValue)
+                        .valueSchemaVersion(1)
+                        .build();
+        auditWriter.record(
+                command,
+                AuditContext.identityUser(
+                        context.tenantId(),
+                        context.actorId(),
+                        context.actorRoleCode(),
+                        context.actorDisplayName(),
+                        context.requestId(),
+                        clock.instant()));
+    }
+
+    private static Map<String, Object> tableAuditValue(StoreTableEntity table) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("tableNumber", table.getTableNumber());
+        value.put("displayName", table.getDisplayName());
+        value.put("seatCapacity", table.getSeatCapacity());
+        value.put("active", table.isActive());
+        value.put("version", table.getVersion());
+        return value;
+    }
+
+    private static Map<String, Object> tableActivationAuditValue(StoreTableEntity table) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("active", table.isActive());
+        value.put("version", table.getVersion());
+        return value;
+    }
+
     private static TableManagementException duplicatedNumber() {
         return new TableManagementException(
                 HttpStatus.CONFLICT,
@@ -183,6 +342,13 @@ public class TableManagementService {
             String tableNumber, String displayName, int seatCapacity, boolean active) {}
 
     public record UpdateTableCommand(String tableNumber, String displayName, int seatCapacity) {}
+
+    public record TableOperationContext(
+            UUID actorId,
+            String actorRoleCode,
+            String actorDisplayName,
+            String tenantId,
+            String requestId) {}
 
     private record TableDetails(
             String tableNumber, String normalizedNumber, String displayName, int seatCapacity) {}

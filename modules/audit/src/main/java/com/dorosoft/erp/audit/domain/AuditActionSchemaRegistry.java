@@ -51,6 +51,9 @@ public final class AuditActionSchemaRegistry {
         register(AuditDomain.ORDER, AuditTargetType.TABLE_SESSION,
                 fields("tableSessionId", "tableId", "status", "openedAt", "closedAt", "version"),
                 Set.of(), Set.of(), false, true, AuditAction.TABLE_SESSION_CLOSED);
+        register(AuditDomain.ORDER, AuditTargetType.TABLE_SESSION,
+                fields("tableSessionId", "tableId", "status", "openedAt", "closedAt", "version"),
+                Set.of(), Set.of(), true, true, AuditAction.TABLE_SESSION_CLOSE_BLOCKED);
         register(AuditDomain.STORE, AuditTargetType.TABLE_LAYOUT,
                 fields("layoutRevision", "chunkIndex", "chunkCount", "canvas", "items"),
                 Set.of(), Set.of(), false, false, AuditAction.TABLE_LAYOUT_UPDATED);

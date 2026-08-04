@@ -206,7 +206,8 @@ class TableQrCredentialApiIntegrationTest {
                                 """
                                 SELECT CONCAT(before_value, after_value, COALESCE(reason, ''))
                                   FROM audit_record
-                                """)
+                                 WHERE action = 'TABLE_QR_ISSUED'
+                                  """)
                         .query(String.class)
                         .single();
         assertThat(auditBody)

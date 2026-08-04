@@ -26,7 +26,11 @@ import org.springframework.test.web.servlet.MvcResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest(properties = "doro.store.bootstrap.enabled=false")
+@SpringBootTest(
+        properties = {
+            "doro.store.bootstrap.enabled=false",
+            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 @DisplayName("TABLE-02 테이블 관리 API 통합 테스트")
@@ -38,6 +42,7 @@ class TableManagementApiIntegrationTest {
 
     @BeforeEach
     void 테이블을_비운다() {
+        TableIntegrationSupport.cleanAuditTables(jdbcClient);
         TableIntegrationSupport.cleanTableTables(jdbcClient);
     }
 

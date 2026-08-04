@@ -32,6 +32,7 @@ public class TableQrCredentialService {
     private final TableQrCredentialJpaRepository credentialRepository;
     private final TableQrTokenFactory tokenFactory;
     private final AuditWriter auditWriter;
+    private final TableOperationObservability observability;
     private final Clock clock;
     private final String publicBaseUrl;
 
@@ -40,47 +41,91 @@ public class TableQrCredentialService {
             TableQrCredentialJpaRepository credentialRepository,
             TableQrTokenFactory tokenFactory,
             AuditWriter auditWriter,
+            TableOperationObservability observability,
             Clock clock,
             @Value("${doro.erp.public-base-url:http://localhost:8080}") String publicBaseUrl) {
         this.tableRepository = tableRepository;
         this.credentialRepository = credentialRepository;
         this.tokenFactory = tokenFactory;
         this.auditWriter = auditWriter;
+        this.observability = observability;
         this.clock = clock;
         this.publicBaseUrl = normalizeBaseUrl(publicBaseUrl);
     }
 
     @Transactional
     public QrCredentialIssueResponse issue(UUID tableId, TableQrOperationContext context) {
-        StoreTableEntity table = lockExistingTable(tableId);
-        if (credentialRepository.findActiveByTableIdForUpdate(table.getTableId()).isPresent()) {
-            throw new TableManagementException(
-                    HttpStatus.CONFLICT,
-                    TableErrorCode.QR_CREDENTIAL_ALREADY_ACTIVE,
-                    "Active QR credential already exists for table.");
+        try {
+            StoreTableEntity table = lockExistingTable(tableId);
+            if (credentialRepository.findActiveByTableIdForUpdate(table.getTableId()).isPresent()) {
+                throw new TableManagementException(
+                        HttpStatus.CONFLICT,
+                        TableErrorCode.QR_CREDENTIAL_ALREADY_ACTIVE,
+                        "Active QR credential already exists for table.");
+            }
+            QrCredentialIssueResponse response =
+                    issueNewCredential(
+                            table.getTableId(), null, AuditAction.TABLE_QR_ISSUED, context, clock.instant());
+            observability.success(
+                    "qr.issue",
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_QR_CREDENTIAL",
+                    response.credentialId());
+            return response;
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "qr.issue",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    tableId);
+            throw exception;
         }
-        return issueNewCredential(
-                table.getTableId(), null, AuditAction.TABLE_QR_ISSUED, context, clock.instant());
     }
 
     @Transactional
     public QrCredentialIssueResponse reissue(UUID tableId, TableQrOperationContext context) {
-        StoreTableEntity table = lockExistingTable(tableId);
-        Instant occurredAt = clock.instant();
-        UUID predecessorCredentialId =
-                credentialRepository
-                        .findActiveByTableIdForUpdate(table.getTableId())
-                        .map(active -> {
-                            active.revoke(context.actorId(), occurredAt);
-                            return active.getCredentialId();
-                        })
-                        .orElse(null);
-        if (predecessorCredentialId != null) {
-            credentialRepository.flush();
-        }
+        try {
+            StoreTableEntity table = lockExistingTable(tableId);
+            Instant occurredAt = clock.instant();
+            UUID predecessorCredentialId =
+                    credentialRepository
+                            .findActiveByTableIdForUpdate(table.getTableId())
+                            .map(active -> {
+                                active.revoke(context.actorId(), occurredAt);
+                                return active.getCredentialId();
+                            })
+                            .orElse(null);
+            if (predecessorCredentialId != null) {
+                credentialRepository.flush();
+            }
 
-        return issueNewCredential(
-                table.getTableId(), predecessorCredentialId, AuditAction.TABLE_QR_ROTATED, context, occurredAt);
+            QrCredentialIssueResponse response =
+                    issueNewCredential(
+                            table.getTableId(), predecessorCredentialId, AuditAction.TABLE_QR_ROTATED, context, occurredAt);
+            observability.success(
+                    "qr.reissue",
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE_QR_CREDENTIAL",
+                    response.credentialId());
+            return response;
+        } catch (RuntimeException exception) {
+            observability.failure(
+                    "qr.reissue",
+                    TableOperationObservability.reason(exception),
+                    context.tenantId(),
+                    context.actorId(),
+                    context.requestId(),
+                    "TABLE",
+                    tableId);
+            throw exception;
+        }
     }
 
     private StoreTableEntity lockExistingTable(UUID tableId) {
@@ -139,6 +184,12 @@ public class TableQrCredentialService {
                 "predecessorCredentialId",
                 credential.getPredecessorId() == null ? null : credential.getPredecessorId().toString());
         afterValue.put("status", credential.getStatus().name());
+        Map<String, Object> beforeValue = new LinkedHashMap<>();
+        if (action == AuditAction.TABLE_QR_ROTATED && credential.getPredecessorId() != null) {
+            beforeValue.put("credentialId", credential.getPredecessorId().toString());
+            beforeValue.put("predecessorCredentialId", null);
+            beforeValue.put("status", TableQrCredentialStatus.ACTIVE.name());
+        }
 
         AuditRecordCommand command =
                 AuditRecordCommand.builder()
@@ -150,7 +201,7 @@ public class TableQrCredentialService {
                                 new AuditPrimaryTarget(
                                         AuditTargetType.TABLE_QR_CREDENTIAL,
                                         credential.getCredentialId()))
-                        .beforeValue(Map.of())
+                        .beforeValue(beforeValue)
                         .afterValue(afterValue)
                         .valueSchemaVersion(1)
                         .build();

@@ -18,7 +18,6 @@ import com.dorosoft.erp.catalog.application.product.UpdateProductService;
 import com.dorosoft.erp.catalog.domain.orderability.OrderabilityReason;
 import com.dorosoft.erp.catalog.domain.orderability.OrderabilityRejectedException;
 import com.dorosoft.erp.catalog.domain.product.Product;
-import com.dorosoft.erp.catalog.domain.product.ProductNotFoundException;
 import com.dorosoft.erp.catalog.domain.product.ProductOptionRequest;
 import java.util.List;
 import java.util.UUID;
@@ -95,10 +94,12 @@ class OrderCatalogReaderIntegrationTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 상품은 ProductNotFoundException")
+    @DisplayName("존재하지 않는 상품은 PRODUCT_NOT_FOUND")
     void throwsProductNotFoundForUnknownProduct() {
         assertThatThrownBy(() -> orderCatalogReader.resolveForOrder(UUID.randomUUID(), List.of()))
-                .isInstanceOf(ProductNotFoundException.class);
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(OrderabilityRejectedException.class))
+                .extracting(OrderabilityRejectedException::reason)
+                .isEqualTo(OrderabilityReason.PRODUCT_NOT_FOUND);
     }
 
     @Test

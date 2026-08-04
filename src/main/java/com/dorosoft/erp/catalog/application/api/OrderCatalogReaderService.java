@@ -2,8 +2,9 @@ package com.dorosoft.erp.catalog.application.api;
 
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityReason;
+import com.dorosoft.erp.catalog.domain.orderability.OrderabilityRejectedException;
 import com.dorosoft.erp.catalog.domain.product.Product;
-import com.dorosoft.erp.catalog.domain.product.ProductNotFoundException;
 import com.dorosoft.erp.catalog.domain.product.ProductOption;
 import java.util.List;
 import java.util.UUID;
@@ -24,7 +25,10 @@ class OrderCatalogReaderService implements OrderCatalogReader {
     @Override
     @Transactional(readOnly = true)
     public OrderCatalogSnapshot resolveForOrder(UUID productId, List<UUID> selectedOptionIds) {
-        Product product = productRepository.findById(productId).orElseThrow(() -> new ProductNotFoundException(productId));
+        Product product =
+                productRepository
+                        .findById(productId)
+                        .orElseThrow(() -> new OrderabilityRejectedException(OrderabilityReason.PRODUCT_NOT_FOUND, productId));
         List<ProductOption> resolvedOptions = product.resolveOrderableOptions(selectedOptionIds);
 
         long catalogRevision =

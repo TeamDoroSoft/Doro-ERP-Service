@@ -3,13 +3,16 @@ package com.dorosoft.erp.order.application.calculation;
 import com.dorosoft.erp.catalog.application.api.OrderCatalogReader;
 import com.dorosoft.erp.catalog.application.api.OrderCatalogSnapshot;
 import com.dorosoft.erp.order.application.port.OrderRepository;
+import com.dorosoft.erp.order.domain.item.InvalidOrderItemsException;
 import com.dorosoft.erp.order.domain.item.InvalidQuantityException;
 import com.dorosoft.erp.order.domain.item.OrderItem;
 import com.dorosoft.erp.order.domain.item.OrderItemOption;
 import com.dorosoft.erp.order.domain.order.EmptyOrderException;
 import com.dorosoft.erp.order.domain.order.Order;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,9 +40,18 @@ public class CalculateOrderService {
         if (command.items().isEmpty()) {
             throw new EmptyOrderException();
         }
+        if (command.items().size() > Order.MAX_ITEMS) {
+            throw new InvalidOrderItemsException("주문 항목은 최대 " + Order.MAX_ITEMS + "개까지 허용합니다");
+        }
+
+        Set<String> clientLineIds = new HashSet<>();
         for (OrderItemSelection selection : command.items()) {
+            validateClientLineId(selection.clientLineId(), clientLineIds);
             if (selection.quantity() < OrderItem.MIN_QUANTITY || selection.quantity() > OrderItem.MAX_QUANTITY) {
                 throw new InvalidQuantityException(selection.quantity());
+            }
+            if (new HashSet<>(selection.optionIds()).size() != selection.optionIds().size()) {
+                throw new InvalidOrderItemsException("같은 주문 항목에서 optionId를 중복 선택할 수 없습니다");
             }
         }
 
@@ -57,6 +69,7 @@ public class CalculateOrderService {
                         .toList();
 
         return OrderItem.create(
+                selection.clientLineId(),
                 snapshot.productId(),
                 snapshot.productName(),
                 snapshot.baseUnitPrice(),
@@ -64,5 +77,15 @@ public class CalculateOrderService {
                 selection.quantity(),
                 snapshot.stockManaged(),
                 snapshot.catalogRevision());
+    }
+
+    private static void validateClientLineId(String clientLineId, Set<String> clientLineIds) {
+        if (clientLineId == null || clientLineId.isBlank() || clientLineId.length() > OrderItem.MAX_CLIENT_LINE_ID_LENGTH) {
+            throw new InvalidOrderItemsException(
+                    "clientLineId는 1~" + OrderItem.MAX_CLIENT_LINE_ID_LENGTH + "자의 식별자여야 합니다");
+        }
+        if (!clientLineIds.add(clientLineId)) {
+            throw new InvalidOrderItemsException("같은 주문에서 clientLineId를 중복 사용할 수 없습니다");
+        }
     }
 }

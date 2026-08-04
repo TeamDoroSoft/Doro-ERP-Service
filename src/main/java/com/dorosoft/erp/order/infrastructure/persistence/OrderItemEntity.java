@@ -23,6 +23,9 @@ class OrderItemEntity {
     @Column(name = "product_id", nullable = false)
     private UUID productId;
 
+    @Column(name = "client_line_id", nullable = false, length = 50)
+    private String clientLineId;
+
     @Column(name = "product_name", nullable = false, length = 100)
     private String productName;
 
@@ -52,6 +55,7 @@ class OrderItemEntity {
 
     OrderItemEntity(
             UUID orderItemId,
+            String clientLineId,
             UUID productId,
             String productName,
             long baseUnitPrice,
@@ -61,6 +65,7 @@ class OrderItemEntity {
             boolean stockManaged,
             long catalogRevision) {
         this.orderItemId = orderItemId;
+        this.clientLineId = clientLineId;
         this.productId = productId;
         this.productName = productName;
         this.baseUnitPrice = baseUnitPrice;
@@ -82,6 +87,10 @@ class OrderItemEntity {
 
     UUID getProductId() {
         return productId;
+    }
+
+    String getClientLineId() {
+        return clientLineId;
     }
 
     String getProductName() {

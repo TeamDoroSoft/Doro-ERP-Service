@@ -42,6 +42,7 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
         OrderItemEntity entity =
                 new OrderItemEntity(
                         UUID.randomUUID(),
+                        item.clientLineId(),
                         item.productId(),
                         item.productName(),
                         item.baseUnitPrice(),
@@ -71,6 +72,7 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
                         .map(o -> new OrderItemOption(o.getOptionId(), o.getOptionName(), o.getAdditionalPrice()))
                         .toList();
         return OrderItem.restore(
+                entity.getClientLineId(),
                 entity.getProductId(),
                 entity.getProductName(),
                 entity.getBaseUnitPrice(),

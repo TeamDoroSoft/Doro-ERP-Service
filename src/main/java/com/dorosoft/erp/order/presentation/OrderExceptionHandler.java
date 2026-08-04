@@ -1,5 +1,6 @@
 package com.dorosoft.erp.order.presentation;
 
+import com.dorosoft.erp.order.domain.item.InvalidOrderItemsException;
 import com.dorosoft.erp.order.domain.item.InvalidQuantityException;
 import com.dorosoft.erp.order.domain.money.OrderAmountOverflowException;
 import com.dorosoft.erp.order.domain.order.EmptyOrderException;
@@ -15,7 +16,7 @@ public class OrderExceptionHandler {
     private static final String INVALID_ORDER_ITEMS = "INVALID_ORDER_ITEMS";
     private static final String ORDER_AMOUNT_OVERFLOW = "ORDER_AMOUNT_OVERFLOW";
 
-    @ExceptionHandler({EmptyOrderException.class, InvalidQuantityException.class})
+    @ExceptionHandler({EmptyOrderException.class, InvalidQuantityException.class, InvalidOrderItemsException.class})
     public ProblemDetail handleInvalidOrderItems(RuntimeException exception) {
         return problem(HttpStatus.BAD_REQUEST, INVALID_ORDER_ITEMS, exception.getMessage());
     }

@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 class OrderItemTest {
 
     private static OrderItem createWithQuantity(int quantity) {
-        return OrderItem.create(UUID.randomUUID(), "아메리카노", 4500L, List.of(), quantity, false, 0L);
+        return OrderItem.create("line-1", UUID.randomUUID(), "아메리카노", 4500L, List.of(), quantity, false, 0L);
     }
 
     @Test
@@ -47,6 +47,7 @@ class OrderItemTest {
         UUID optionId = UUID.randomUUID();
         OrderItem item =
                 OrderItem.create(
+                        "line-1",
                         UUID.randomUUID(),
                         "아메리카노",
                         4500L,
@@ -64,9 +65,24 @@ class OrderItemTest {
     void restoresStoredSnapshotAmounts() {
         OrderItem item =
                 OrderItem.restore(
-                        UUID.randomUUID(), "아메리카노", 4500L, List.of(), 2, 7000L, 14000L, false, 3L);
+                        "line-1", UUID.randomUUID(), "아메리카노", 4500L, List.of(), 2, 7000L, 14000L, false, 3L);
 
         assertThat(item.price().unitPrice().amount()).isEqualTo(7000L);
         assertThat(item.price().lineTotal().amount()).isEqualTo(14000L);
+    }
+
+    @Test
+    @DisplayName("같은 Item의 Option ID 중복을 거부한다")
+    void rejectsDuplicateOptionIds() {
+        UUID optionId = UUID.randomUUID();
+        List<OrderItemOption> options =
+                List.of(
+                        new OrderItemOption(optionId, "샷 추가", 500L),
+                        new OrderItemOption(optionId, "샷 추가", 500L));
+
+        assertThatThrownBy(
+                        () -> OrderItem.create(
+                                "line-1", UUID.randomUUID(), "아메리카노", 4500L, options, 1, false, 0L))
+                .isInstanceOf(InvalidOrderItemsException.class);
     }
 }

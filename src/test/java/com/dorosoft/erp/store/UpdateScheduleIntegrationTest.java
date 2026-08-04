@@ -83,6 +83,28 @@ class UpdateScheduleIntegrationTest {
                 .isEqualTo(1L);
     }
 
+    @Test
+    void updatesProfileWithCurrentVersionAfterScheduleRowsExist() throws Exception {
+        update(validBody(), "store.settings.update", String.valueOf(initialVersion))
+                .andExpect(status().isOk());
+
+        long scheduleVersion = currentVersion();
+        assertThat(count("business_hour")).isPositive();
+
+        mockMvc.perform(put("/api/v1/store-settings/profile")
+                        .headers(actorHeaders("store.settings.update"))
+                        .header("If-Match", String.valueOf(scheduleVersion))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"일정 저장 후 변경","address":"서울시 중구","contact":"02-1234-5678","timeZone":"Asia/Seoul"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.profile.name").value("일정 저장 후 변경"));
+
+        assertThat(count("business_hour")).isEqualTo(2L);
+        assertThat(currentVersion()).isGreaterThan(scheduleVersion);
+    }
+
     @ParameterizedTest
     @MethodSource("invalidBodies")
     void rejectsInvalidSchedules(String body, String code, String field) throws Exception {

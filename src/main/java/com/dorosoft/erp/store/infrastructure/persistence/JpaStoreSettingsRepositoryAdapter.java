@@ -80,9 +80,9 @@ public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepositor
                                 + entity.getVersion());
             }
             // 일정 자식은 매번 대리키를 새로 만들어 통째로 교체하므로 delete-then-insert가 된다.
-            // 새 일정 INSERT보다 기존 일정 DELETE가 먼저 실행되도록 자식 행만 즉시 삭제한다.
-            // 프로필을 변경하기 전에 실행하므로 이 과정에서는 store_profile UPDATE가 발생하지 않는다.
-            deleteScheduleRows(settings.storeId());
+            // orphanRemoval DELETE를 먼저 flush해 자연키가 같은 새 일정의 INSERT와 분리한다.
+            entity.clearSchedule();
+            entityManager.flush();
 
             entity.applyProfile(
                     profile.name(), profile.address(), profile.contact(), profile.timeZone().getId());
@@ -98,20 +98,6 @@ public class JpaStoreSettingsRepositoryAdapter implements StoreSettingsRepositor
                 settings.schedule(),
                 settings.features(),
                 saved.getVersion());
-    }
-
-    private void deleteScheduleRows(UUID storeId) {
-        deleteScheduleRows("business_hour", storeId);
-        deleteScheduleRows("temporary_closure", storeId);
-        deleteScheduleRows("service_window", storeId);
-        deleteScheduleRows("regular_closed_day", storeId);
-    }
-
-    private void deleteScheduleRows(String tableName, UUID storeId) {
-        entityManager
-                .createNativeQuery("DELETE FROM " + tableName + " WHERE store_id = :storeId")
-                .setParameter("storeId", storeId)
-                .executeUpdate();
     }
 
     // --- Domain -> Entity ----------------------------------------------------

@@ -143,8 +143,8 @@ class StoreProfileEntity {
      * 일정 자식 4종을 모두 비운다.
      *
      * <p>일정 자식은 저장할 때마다 대리키를 새로 만들어 delete-then-insert로 교체된다. Hibernate는 한 번의 flush 안에서 INSERT를
-     * orphan DELETE보다 먼저 실행할 수 있어, 이전 행과 자연키(uk_business_hour_slot 등)가 겹치면 UNIQUE 위반이 난다. 삭제만 먼저
-     * flush하기 위한 진입점이다.
+     * orphan DELETE보다 먼저 실행할 수 있어, 이전 행과 자연키(uk_business_hour_slot 등)가 겹치면 UNIQUE 위반이 난다. 호출 직후
+     * flush하여 orphanRemoval DELETE만 먼저 실행하기 위한 진입점이다.
      */
     void clearSchedule() {
         this.businessHours.clear();

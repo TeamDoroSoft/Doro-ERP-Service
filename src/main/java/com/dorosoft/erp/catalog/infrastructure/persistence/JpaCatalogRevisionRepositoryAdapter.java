@@ -2,6 +2,7 @@ package com.dorosoft.erp.catalog.infrastructure.persistence;
 
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.domain.revision.CatalogRevision;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -56,6 +57,16 @@ public class JpaCatalogRevisionRepositoryAdapter implements CatalogRevisionRepos
 
         CatalogRevisionEntity saved = jpaRepository.saveAndFlush(entity);
         return toDomain(saved);
+    }
+
+    @Override
+    public CatalogRevision advance() {
+        int updated = jpaRepository.bumpRevision(Instant.now());
+        if (updated != 1) {
+            throw new IllegalStateException(
+                    "업체 Schema에는 catalog_revision이 하나만 존재해야 합니다. 실제 갱신 행 수: " + updated);
+        }
+        return findCurrent().orElseThrow(() -> new IllegalStateException("Catalog가 초기화되지 않았습니다"));
     }
 
     private static CatalogRevision toDomain(CatalogRevisionEntity entity) {

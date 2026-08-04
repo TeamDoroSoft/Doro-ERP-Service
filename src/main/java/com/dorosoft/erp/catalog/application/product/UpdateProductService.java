@@ -1,6 +1,7 @@
 package com.dorosoft.erp.catalog.application.product;
 
 import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
+import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.ProductMediaRepository;
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
@@ -35,16 +36,19 @@ public class UpdateProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final ProductMediaRepository productMediaRepository;
+    private final CatalogRevisionRepository catalogRevisionRepository;
     private final AuditWriter auditWriter;
 
     public UpdateProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
             ProductMediaRepository productMediaRepository,
+            CatalogRevisionRepository catalogRevisionRepository,
             AuditWriter auditWriter) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.productMediaRepository = productMediaRepository;
+        this.catalogRevisionRepository = catalogRevisionRepository;
         this.auditWriter = auditWriter;
     }
 
@@ -80,6 +84,7 @@ public class UpdateProductService {
                         command.stockManaged(),
                         displayOrder);
         Product saved = productRepository.save(updated);
+        catalogRevisionRepository.advance();
 
         recordAudit(current, saved, auditContext);
 

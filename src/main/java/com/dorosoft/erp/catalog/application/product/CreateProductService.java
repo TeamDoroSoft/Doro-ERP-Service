@@ -102,6 +102,7 @@ public class CreateProductService {
                         command.idempotencyKey(),
                         requestHash);
         Product saved = productRepository.save(product);
+        catalogRevisionRepository.advance();
 
         auditWriter.record(
                 new AuditRecordCommand(

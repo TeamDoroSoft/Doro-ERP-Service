@@ -61,6 +61,7 @@ public class CreateCategoryService {
         Category category =
                 Category.create(UUID.randomUUID(), catalogId, name, nextDisplayOrder, Instant.now(), idempotencyKey, requestHash);
         Category saved = categoryRepository.save(category);
+        catalogRevisionRepository.advance();
 
         auditWriter.record(
                 AuditRecordCommand.of(

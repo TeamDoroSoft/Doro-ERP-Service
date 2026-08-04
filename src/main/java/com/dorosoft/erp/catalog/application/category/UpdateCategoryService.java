@@ -1,6 +1,7 @@
 package com.dorosoft.erp.catalog.application.category;
 
 import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
+import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.port.audit.AuditRecordCommand;
@@ -22,10 +23,13 @@ public class UpdateCategoryService {
     private static final String VALUE_SCHEMA_VERSION = "v1";
 
     private final CategoryRepository categoryRepository;
+    private final CatalogRevisionRepository catalogRevisionRepository;
     private final AuditWriter auditWriter;
 
-    public UpdateCategoryService(CategoryRepository categoryRepository, AuditWriter auditWriter) {
+    public UpdateCategoryService(
+            CategoryRepository categoryRepository, CatalogRevisionRepository catalogRevisionRepository, AuditWriter auditWriter) {
         this.categoryRepository = categoryRepository;
+        this.catalogRevisionRepository = catalogRevisionRepository;
         this.auditWriter = auditWriter;
     }
 
@@ -38,6 +42,7 @@ public class UpdateCategoryService {
                             + ", 현재 version=" + current.version());
         }
         Category updated = categoryRepository.save(current.rename(newName));
+        catalogRevisionRepository.advance();
 
         auditWriter.record(
                 AuditRecordCommand.of(

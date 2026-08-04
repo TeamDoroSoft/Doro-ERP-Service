@@ -37,10 +37,10 @@ class CatalogRevisionRepositoryContractTest {
     }
 
     @Test
-    @DisplayName("Port는 findCurrent·save·exists 3개 메서드만 노출한다")
-    void exposesExactlyThreeMethods() {
+    @DisplayName("Port는 findCurrent·save·advance·exists 4개 메서드만 노출한다")
+    void exposesExactlyFourMethods() {
         assertThat(declaredMethods()).extracting(Method::getName)
-                .containsExactlyInAnyOrder("findCurrent", "save", "exists");
+                .containsExactlyInAnyOrder("findCurrent", "save", "advance", "exists");
     }
 
     @Test
@@ -51,12 +51,16 @@ class CatalogRevisionRepositoryContractTest {
         Method save =
                 CatalogRevisionRepository.class.getDeclaredMethod(
                         "save", com.dorosoft.erp.catalog.domain.revision.CatalogRevision.class);
+        Method advance = CatalogRevisionRepository.class.getDeclaredMethod("advance");
 
         assertThat(findCurrent.getParameterCount()).isZero();
         assertThat(findCurrent.getReturnType()).isEqualTo(Optional.class);
         assertThat(exists.getParameterCount()).isZero();
         assertThat(exists.getReturnType()).isEqualTo(boolean.class);
         assertThat(save.getReturnType())
+                .isEqualTo(com.dorosoft.erp.catalog.domain.revision.CatalogRevision.class);
+        assertThat(advance.getParameterCount()).isZero();
+        assertThat(advance.getReturnType())
                 .isEqualTo(com.dorosoft.erp.catalog.domain.revision.CatalogRevision.class);
     }
 }

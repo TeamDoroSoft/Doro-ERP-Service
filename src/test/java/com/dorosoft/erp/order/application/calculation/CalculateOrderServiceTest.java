@@ -133,6 +133,14 @@ class CalculateOrderServiceTest {
     }
 
     @Test
+    @DisplayName("null Item은 INVALID_ORDER_ITEMS")
+    void rejectsNullItem() {
+        assertThatThrownBy(() -> new CalculateOrderCommand(Collections.singletonList(null)))
+                .isInstanceOf(InvalidOrderItemsException.class)
+                .hasMessage("주문 Item은 필수입니다");
+    }
+
+    @Test
     @DisplayName("clientLineId는 공백이 아니고 50자 이하여야 한다")
     void validatesClientLineId() {
         assertThatThrownBy(

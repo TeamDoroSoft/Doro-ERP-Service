@@ -3,7 +3,6 @@ package com.dorosoft.erp.order.infrastructure.persistence;
 import com.dorosoft.erp.order.application.port.OrderRepository;
 import com.dorosoft.erp.order.domain.item.OrderItem;
 import com.dorosoft.erp.order.domain.item.OrderItemOption;
-import com.dorosoft.erp.order.domain.money.OrderAmount;
 import com.dorosoft.erp.order.domain.order.Order;
 import java.util.List;
 import java.util.Optional;
@@ -63,7 +62,7 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
 
     private static Order toDomain(OrderEntity entity) {
         List<OrderItem> items = entity.getItems().stream().map(JpaOrderRepositoryAdapter::toItemDomain).toList();
-        return new Order(entity.getOrderId(), items, OrderAmount.of(entity.getTotalAmount()), entity.getCreatedAt());
+        return Order.restore(entity.getOrderId(), items, entity.getTotalAmount(), entity.getCreatedAt());
     }
 
     private static OrderItem toItemDomain(OrderItemEntity entity) {
@@ -71,12 +70,14 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
                 entity.getOptions().stream()
                         .map(o -> new OrderItemOption(o.getOptionId(), o.getOptionName(), o.getAdditionalPrice()))
                         .toList();
-        return OrderItem.create(
+        return OrderItem.restore(
                 entity.getProductId(),
                 entity.getProductName(),
                 entity.getBaseUnitPrice(),
                 options,
                 entity.getQuantity(),
+                entity.getUnitPrice(),
+                entity.getLineAmount(),
                 entity.isStockManaged(),
                 entity.getCatalogRevision());
     }

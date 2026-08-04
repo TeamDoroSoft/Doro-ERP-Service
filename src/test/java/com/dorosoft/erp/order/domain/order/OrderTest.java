@@ -45,4 +45,12 @@ class OrderTest {
         assertThatThrownBy(() -> Order.create(UUID.randomUUID(), List.of(first, second), Instant.now()))
                 .isInstanceOf(OrderAmountOverflowException.class);
     }
+
+    @Test
+    @DisplayName("restore()는 저장된 주문 총액을 다시 계산하지 않는다")
+    void restoresStoredTotalAmount() {
+        Order order = Order.restore(UUID.randomUUID(), List.of(item(4500L, 2)), 12000L, Instant.now());
+
+        assertThat(order.totalAmount().amount()).isEqualTo(12000L);
+    }
 }

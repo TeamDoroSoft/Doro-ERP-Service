@@ -41,7 +41,7 @@ class OrderAmountTest {
     @Test
     @DisplayName("multiply()는 Math.multiplyExact로 수량을 곱한다")
     void multipliesByQuantity() {
-        OrderAmount result = OrderAmount.of(5000L).multiply(2L);
+        OrderAmount result = OrderAmount.of(5000L).multiply(2);
 
         assertThat(result.amount()).isEqualTo(10000L);
     }
@@ -51,6 +51,15 @@ class OrderAmountTest {
     void multiplyOverflows() {
         OrderAmount huge = OrderAmount.of(Long.MAX_VALUE / 2);
 
-        assertThatThrownBy(() -> huge.multiply(99L)).isInstanceOf(OrderAmountOverflowException.class);
+        assertThatThrownBy(() -> huge.multiply(99)).isInstanceOf(OrderAmountOverflowException.class);
+    }
+
+    @Test
+    @DisplayName("multiply()는 0과 음수 계수를 거부한다")
+    void rejectsNonPositiveMultiplier() {
+        OrderAmount amount = OrderAmount.of(5000L);
+
+        assertThatThrownBy(() -> amount.multiply(0)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> amount.multiply(-1)).isInstanceOf(IllegalArgumentException.class);
     }
 }

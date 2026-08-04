@@ -25,7 +25,10 @@ public record OrderAmount(long amount) {
         }
     }
 
-    public OrderAmount multiply(long factor) {
+    public OrderAmount multiply(int factor) {
+        if (factor <= 0) {
+            throw new IllegalArgumentException("금액 곱셈 계수는 1 이상이어야 합니다. 입력값=" + factor);
+        }
         try {
             return new OrderAmount(Math.multiplyExact(amount, factor));
         } catch (ArithmeticException e) {

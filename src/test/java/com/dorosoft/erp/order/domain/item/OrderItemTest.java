@@ -58,4 +58,15 @@ class OrderItemTest {
         assertThat(item.price().unitPrice().amount()).isEqualTo(5000L);
         assertThat(item.price().lineTotal().amount()).isEqualTo(10000L);
     }
+
+    @Test
+    @DisplayName("restore()는 저장된 주문 시점 금액을 다시 계산하지 않는다")
+    void restoresStoredSnapshotAmounts() {
+        OrderItem item =
+                OrderItem.restore(
+                        UUID.randomUUID(), "아메리카노", 4500L, List.of(), 2, 7000L, 14000L, false, 3L);
+
+        assertThat(item.price().unitPrice().amount()).isEqualTo(7000L);
+        assertThat(item.price().lineTotal().amount()).isEqualTo(14000L);
+    }
 }

@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: Doro-ERP-Service
+  config:
+    import: optional:file:./.env[.properties]
+  profiles:
+    active: local
+  mvc:
+    problemdetails:
+      enabled: true
+  flyway:
+    locations: classpath:db/migration
+    enabled: true
+  session:
+    timeout: 1h
+    data:
+      redis:
+        namespace: ${SPRING_SESSION_REDIS_NAMESPACE:erp:local:local-store:identity}
+        repository-type: indexed
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:false}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          # DB 저장 시각은 UTC로 통일한다
+          time_zone: UTC
+
+server:
+  servlet:
+    session:
+      timeout: 1h
+      cookie:
+        name: __Host-ERPSESSION
+        path: /
+        same-site: strict
+        http-only: true
+        secure: true
+
+doro:
+  erp:
+    environment: ${ERP_ENVIRONMENT:local}
+    tenant-id: ${ERP_TENANT_ID:local-store}
+    public-base-url: ${ERP_PUBLIC_BASE_URL:http://localhost:8080}
+    allowed-origins: ${ERP_ALLOWED_ORIGINS:http://localhost:5173}
+  catalog:
+    bootstrap:
+      # catalog_revision 초기화 Runner 실행 여부
+      enabled: true
+    media:
+      # ADR-007: 배포당 업체 하나이므로 tenantId는 요청 파라미터가 아니라 배포 설정값이다
+      tenant-id: ${DORO_CATALOG_MEDIA_TENANT_ID:local}
+      bucket: ${DORO_CATALOG_MEDIA_BUCKET:dorosoft-product-media-local}
+      region: ${DORO_CATALOG_MEDIA_REGION:ap-northeast-2}
+      cloud-front-domain: ${DORO_CATALOG_MEDIA_CLOUD_FRONT_DOMAIN:media.local.dorosoft.example}
+      cleanup:
+        # 만료 PENDING Media 정리 Scheduler 실행 여부
+        enabled: true
+
+identity:
+  rate-limit:
+    hmac-key-base64: ${IDENTITY_RATE_LIMIT_HMAC_KEY_BASE64:}
+    hmac-previous-key-base64: ${IDENTITY_RATE_LIMIT_HMAC_PREVIOUS_KEY_BASE64:}
+  idempotency:
+    master-key-version: ${IDENTITY_IDEMPOTENCY_MASTER_KEY_VERSION:dev}
+    master-key-base64: ${IDENTITY_IDEMPOTENCY_MASTER_KEY_BASE64:}
+    previous-master-key-version: ${IDENTITY_IDEMPOTENCY_PREVIOUS_MASTER_KEY_VERSION:}
+    previous-master-key-base64: ${IDENTITY_IDEMPOTENCY_PREVIOUS_MASTER_KEY_BASE64:}
+
+audit:
+  security:
+    payload-hmac:
+      key-base64: ${AUDIT_PAYLOAD_HMAC_KEY_BASE64:}
+      previous-key-base64: ${AUDIT_PAYLOAD_HMAC_PREVIOUS_KEY_BASE64:}
+    cursor-hmac:
+      key-base64: ${AUDIT_CURSOR_HMAC_KEY_BASE64:}
+      previous-key-base64: ${AUDIT_CURSOR_HMAC_PREVIOUS_KEY_BASE64:}
+    privacy-client-address:
+      key-version: ${PRIVACY_CLIENT_ADDRESS_KEY_VERSION:}
+      key-base64: ${PRIVACY_CLIENT_ADDRESS_KEY_BASE64:}
+
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}

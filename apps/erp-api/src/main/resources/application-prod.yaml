@@ -1,0 +1,47 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST}
+      port: ${SPRING_DATA_REDIS_PORT}
+      username: ${SPRING_DATA_REDIS_USERNAME:}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${SPRING_DATA_REDIS_SSL_ENABLED:false}
+  session:
+    data:
+      redis:
+        namespace: ${SPRING_SESSION_REDIS_NAMESPACE}
+        repository-type: indexed
+
+doro:
+  erp:
+    environment: ${ERP_ENVIRONMENT}
+    tenant-id: ${ERP_TENANT_ID}
+    public-base-url: ${ERP_PUBLIC_BASE_URL}
+    allowed-origins: ${ERP_ALLOWED_ORIGINS}
+
+identity:
+  rate-limit:
+    hmac-key-base64: ${IDENTITY_RATE_LIMIT_HMAC_KEY_BASE64}
+    hmac-previous-key-base64: ${IDENTITY_RATE_LIMIT_HMAC_PREVIOUS_KEY_BASE64:}
+  idempotency:
+    master-key-version: ${IDENTITY_IDEMPOTENCY_MASTER_KEY_VERSION}
+    master-key-base64: ${IDENTITY_IDEMPOTENCY_MASTER_KEY_BASE64}
+    previous-master-key-version: ${IDENTITY_IDEMPOTENCY_PREVIOUS_MASTER_KEY_VERSION:}
+    previous-master-key-base64: ${IDENTITY_IDEMPOTENCY_PREVIOUS_MASTER_KEY_BASE64:}
+
+audit:
+  security:
+    payload-hmac:
+      key-base64: ${AUDIT_PAYLOAD_HMAC_KEY_BASE64}
+      previous-key-base64: ${AUDIT_PAYLOAD_HMAC_PREVIOUS_KEY_BASE64:}
+    cursor-hmac:
+      key-base64: ${AUDIT_CURSOR_HMAC_KEY_BASE64}
+      previous-key-base64: ${AUDIT_CURSOR_HMAC_PREVIOUS_KEY_BASE64:}
+    privacy-client-address:
+      key-version: ${PRIVACY_CLIENT_ADDRESS_KEY_VERSION}
+      key-base64: ${PRIVACY_CLIENT_ADDRESS_KEY_BASE64}

@@ -1,0 +1,13 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+doro:
+  catalog:
+    media:
+      tenant-id: test-tenant
+      bucket: dorosoft-product-media-test
+      region: ap-northeast-2
+      cloud-front-domain: media.test.dorosoft.example

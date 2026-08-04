@@ -105,7 +105,7 @@ class ProductTest {
             assertThat(updated.categoryId()).isEqualTo(newCategoryId);
             assertThat(updated.mediaId()).isEqualTo(newMediaId);
             assertThat(updated.name()).isEqualTo("카페라떼");
-            assertThat(updated.basePrice()).isEqualTo(5000L);
+            assertThat(updated.basePrice().amount()).isEqualTo(5000L);
             assertThat(updated.salesEnabled()).isFalse();
             assertThat(updated.stockManaged()).isTrue();
             assertThat(updated.displayOrder()).isEqualTo(3);

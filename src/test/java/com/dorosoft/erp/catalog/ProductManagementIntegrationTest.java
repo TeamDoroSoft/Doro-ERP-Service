@@ -166,7 +166,7 @@ class ProductManagementIntegrationTest {
                         auditContext);
 
         assertThat(updated.name()).isEqualTo("카페라떼");
-        assertThat(updated.basePrice()).isEqualTo(5000L);
+        assertThat(updated.basePrice().amount()).isEqualTo(5000L);
         assertThat(updated.salesEnabled()).isFalse();
         assertThat(updated.soldOut()).isFalse();
         assertThat(updated.version()).isGreaterThan(created.version());

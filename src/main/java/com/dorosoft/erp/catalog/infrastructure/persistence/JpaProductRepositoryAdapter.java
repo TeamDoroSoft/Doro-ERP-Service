@@ -1,6 +1,7 @@
 package com.dorosoft.erp.catalog.infrastructure.persistence;
 
 import com.dorosoft.erp.catalog.application.port.ProductRepository;
+import com.dorosoft.erp.catalog.domain.product.Money;
 import com.dorosoft.erp.catalog.domain.product.Product;
 import com.dorosoft.erp.catalog.domain.product.ProductOption;
 import java.util.List;
@@ -36,7 +37,7 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                             product.mediaId(),
                             product.name(),
                             product.description(),
-                            product.basePrice(),
+                            product.basePrice().amount(),
                             product.imageAltText(),
                             product.salesEnabled(),
                             product.soldOut(),
@@ -60,7 +61,7 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                     product.mediaId(),
                     product.name(),
                     product.description(),
-                    product.basePrice(),
+                    product.basePrice().amount(),
                     product.imageAltText(),
                     product.salesEnabled(),
                     product.soldOut(),
@@ -100,7 +101,10 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
 
     private static List<ProductOptionEntity> toEntities(List<ProductOption> options) {
         return options.stream()
-                .map(o -> new ProductOptionEntity(o.optionId(), o.name(), o.additionalPrice(), o.enabled(), o.displayOrder()))
+                .map(
+                        o ->
+                                new ProductOptionEntity(
+                                        o.optionId(), o.name(), o.additionalPrice().amount(), o.enabled(), o.displayOrder()))
                 .toList();
     }
 
@@ -110,7 +114,11 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                         .map(
                                 o ->
                                         new ProductOption(
-                                                o.getProductOptionId(), o.getName(), o.getAdditionalPrice(), o.isEnabled(), o.getDisplayOrder()))
+                                                o.getProductOptionId(),
+                                                o.getName(),
+                                                Money.of(o.getAdditionalPrice()),
+                                                o.isEnabled(),
+                                                o.getDisplayOrder()))
                         .sorted(java.util.Comparator.comparingInt(ProductOption::displayOrder))
                         .toList();
         return new Product(
@@ -120,7 +128,7 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
                 entity.getMediaId(),
                 entity.getName(),
                 entity.getDescription(),
-                entity.getBasePrice(),
+                Money.of(entity.getBasePrice()),
                 entity.getImageAltText(),
                 entity.isSalesEnabled(),
                 entity.isSoldOut(),

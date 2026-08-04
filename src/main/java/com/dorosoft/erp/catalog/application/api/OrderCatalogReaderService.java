@@ -39,10 +39,15 @@ class OrderCatalogReaderService implements OrderCatalogReader {
 
         List<SelectedOptionSnapshot> selected =
                 resolvedOptions.stream()
-                        .map(o -> new SelectedOptionSnapshot(o.optionId(), o.name(), o.additionalPrice()))
+                        .map(o -> new SelectedOptionSnapshot(o.optionId(), o.name(), o.additionalPrice().amount()))
                         .toList();
 
         return new OrderCatalogSnapshot(
-                product.productId(), product.name(), product.basePrice(), selected, product.stockManaged(), catalogRevision);
+                product.productId(),
+                product.name(),
+                product.basePrice().amount(),
+                selected,
+                product.stockManaged(),
+                catalogRevision);
     }
 }

@@ -24,7 +24,7 @@ public record Product(
         UUID mediaId,
         String name,
         String description,
-        long basePrice,
+        Money basePrice,
         String imageAltText,
         boolean salesEnabled,
         boolean soldOut,
@@ -48,8 +48,8 @@ public record Product(
         name = requireValidName(name);
         description = requireValidDescription(description);
         imageAltText = requireValidImageAltText(imageAltText);
-        if (basePrice < 0) {
-            throw new InvalidPriceException("상품 가격", basePrice);
+        if (basePrice.amount() < 0) {
+            throw new InvalidPriceException("상품 가격", basePrice.amount());
         }
         if (displayOrder < 0) {
             throw new IllegalArgumentException("displayOrder는 0 이상이어야 한다");
@@ -73,7 +73,7 @@ public record Product(
             String idempotencyKey,
             String idempotencyRequestHash) {
         return new Product(
-                productId, catalogId, categoryId, mediaId, name, description, basePrice, imageAltText,
+                productId, catalogId, categoryId, mediaId, name, description, Money.of(basePrice), imageAltText,
                 salesEnabled, false, stockManaged, displayOrder, 0L, now, now, List.of(),
                 idempotencyKey, idempotencyRequestHash);
     }
@@ -90,7 +90,7 @@ public record Product(
             boolean stockManaged,
             int displayOrder) {
         return new Product(
-                productId, catalogId, categoryId, mediaId, name, description, basePrice, imageAltText,
+                productId, catalogId, categoryId, mediaId, name, description, Money.of(basePrice), imageAltText,
                 salesEnabled, soldOut, stockManaged, displayOrder, version, createdAt, updatedAt, options,
                 idempotencyKey, idempotencyRequestHash);
     }
@@ -143,7 +143,7 @@ public record Product(
         for (int i = 0; i < requested.size(); i++) {
             ProductOptionRequest r = requested.get(i);
             UUID optionId = r.optionId() != null ? r.optionId() : UUID.randomUUID();
-            newOptions.add(new ProductOption(optionId, r.name(), r.additionalPrice(), r.enabled(), i));
+            newOptions.add(new ProductOption(optionId, r.name(), Money.of(r.additionalPrice()), r.enabled(), i));
         }
 
         return new Product(

@@ -68,13 +68,13 @@ class PublishedMenuReaderService implements PublishedMenuReader {
         List<PublishedOption> options =
                 product.options().stream()
                         .filter(ProductOption::enabled)
-                        .map(o -> new PublishedOption(o.optionId(), o.name(), o.additionalPrice()))
+                        .map(o -> new PublishedOption(o.optionId(), o.name(), o.additionalPrice().amount()))
                         .toList();
         return new PublishedProduct(
                 product.productId(),
                 product.name(),
                 product.description(),
-                product.basePrice(),
+                product.basePrice().amount(),
                 resolveImageUrl(product.mediaId()),
                 product.imageAltText(),
                 product.soldOut(),

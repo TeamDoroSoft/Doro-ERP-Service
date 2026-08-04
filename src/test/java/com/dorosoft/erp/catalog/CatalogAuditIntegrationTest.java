@@ -159,7 +159,7 @@ class CatalogAuditIntegrationTest {
         updateProductService.replaceBasicInfo(
                 created.productId(),
                 new ReplaceProductBasicInfoCommand(
-                        category.categoryId(), "아메리카노 리저브", created.description(), created.basePrice(), null, null, true, false),
+                        category.categoryId(), "아메리카노 리저브", created.description(), created.basePrice().amount(), null, null, true, false),
                 created.version(),
                 auditContext);
 

@@ -75,7 +75,7 @@ public class ReplaceProductOptionsService {
                                 CatalogAuditValues.map(
                                         "optionId", option.optionId(),
                                         "name", option.name(),
-                                        "additionalPrice", option.additionalPrice(),
+                                        "additionalPrice", option.additionalPrice().amount(),
                                         "enabled", option.enabled(),
                                         "displayOrder", option.displayOrder()))
                 .toList();

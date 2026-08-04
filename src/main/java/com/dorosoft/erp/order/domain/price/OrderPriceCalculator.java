@@ -16,11 +16,12 @@ public final class OrderPriceCalculator {
     private OrderPriceCalculator() {}
 
     public static OrderPrice calculate(long baseUnitPrice, List<Long> additionalPrices, int quantity) {
-        OrderAmount unitPrice = OrderAmount.of(baseUnitPrice);
+        OrderAmount optionUnitAmount = OrderAmount.of(0L);
         for (long additionalPrice : additionalPrices) {
-            unitPrice = unitPrice.add(OrderAmount.of(additionalPrice));
+            optionUnitAmount = optionUnitAmount.add(OrderAmount.of(additionalPrice));
         }
+        OrderAmount unitPrice = OrderAmount.of(baseUnitPrice).add(optionUnitAmount);
         OrderAmount lineTotal = unitPrice.multiply(quantity);
-        return new OrderPrice(unitPrice, lineTotal);
+        return new OrderPrice(optionUnitAmount, unitPrice, lineTotal);
     }
 }

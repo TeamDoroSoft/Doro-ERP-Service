@@ -47,6 +47,9 @@ public class CalculateOrderService {
         Set<String> clientLineIds = new HashSet<>();
         for (OrderItemSelection selection : command.items()) {
             validateClientLineId(selection.clientLineId(), clientLineIds);
+            if (selection.productId() == null) {
+                throw new InvalidOrderItemsException("productId는 필수다");
+            }
             if (selection.quantity() < OrderItem.MIN_QUANTITY || selection.quantity() > OrderItem.MAX_QUANTITY) {
                 throw new InvalidQuantityException(selection.quantity());
             }

@@ -27,7 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Append-only audit writer configured explicitly with the Feature 17 runtime HMAC key ring. */
-public final class DefaultAuditWriter implements AuditWriter {
+public class DefaultAuditWriter implements AuditWriter {
     private final AuditAppendPort appendPort;
     private final AuditPayloadSigner payloadSigner;
     private final AuditRecordValidator validator;

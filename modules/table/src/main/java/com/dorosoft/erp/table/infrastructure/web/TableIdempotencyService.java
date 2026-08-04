@@ -10,6 +10,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +38,16 @@ class TableIdempotencyService {
             HttpServletRequest request,
             Object requestBody,
             Supplier<ResponseEntity<?>> operation) {
+        return execute(idempotencyKey, request, requestBody, operation, ResponseEntity::getBody);
+    }
+
+    @Transactional
+    ResponseEntity<Object> execute(
+            String idempotencyKey,
+            HttpServletRequest request,
+            Object requestBody,
+            Supplier<ResponseEntity<?>> operation,
+            Function<ResponseEntity<?>, Object> replayBody) {
         String normalizedKey = normalizeKey(idempotencyKey);
         String method = request.getMethod();
         String path = request.getRequestURI();
@@ -64,7 +75,7 @@ class TableIdempotencyService {
                         path,
                         requestHash,
                         response.getStatusCode().value(),
-                        writeBody(response.getBody()),
+                        writeBody(replayBody.apply(response)),
                         Instant.now()));
         return ResponseEntity.status(response.getStatusCode())
                 .headers(response.getHeaders())

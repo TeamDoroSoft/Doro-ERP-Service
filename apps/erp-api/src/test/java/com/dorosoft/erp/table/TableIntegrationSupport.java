@@ -15,9 +15,15 @@ final class TableIntegrationSupport {
     private TableIntegrationSupport() {}
 
     static void cleanTableTables(JdbcClient jdbcClient) {
+        jdbcClient.sql("UPDATE table_qr_credential SET predecessor_id = NULL WHERE predecessor_id IS NOT NULL").update();
         for (String table : DELETE_ORDER) {
             jdbcClient.sql("DELETE FROM " + table).update();
         }
+    }
+
+    static void cleanAuditTables(JdbcClient jdbcClient) {
+        jdbcClient.sql("DELETE FROM audit_record_target").update();
+        jdbcClient.sql("DELETE FROM audit_record").update();
     }
 
     static long countOf(JdbcClient jdbcClient, String table) {

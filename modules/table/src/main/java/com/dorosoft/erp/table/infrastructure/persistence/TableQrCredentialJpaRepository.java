@@ -20,5 +20,8 @@ public interface TableQrCredentialJpaRepository extends JpaRepository<TableQrCre
             """)
     Optional<TableQrCredentialEntity> findActiveByTableIdForUpdate(@Param("tableId") UUID tableId);
 
+    Optional<TableQrCredentialEntity> findByTokenDigestAndStatus(
+            byte[] tokenDigest, TableQrCredentialStatus status);
+
     long countByTableIdAndStatus(UUID tableId, TableQrCredentialStatus status);
 }

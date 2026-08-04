@@ -1,6 +1,8 @@
 package com.dorosoft.erp.table;
 
+import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 final class TableIntegrationSupport {
@@ -26,10 +28,29 @@ final class TableIntegrationSupport {
         jdbcClient.sql("DELETE FROM audit_record").update();
     }
 
+    static void openUsageSession(JdbcClient jdbcClient, UUID sessionId, UUID tableId) {
+        jdbcClient.sql(
+                        """
+                        INSERT INTO table_usage_session (session_id, table_id, status, opened_by, opened_at)
+                        VALUES (:sessionId, :tableId, 'OPEN', :openedBy, CURRENT_TIMESTAMP(6))
+                        """)
+                .param("sessionId", uuidBytes(sessionId))
+                .param("tableId", uuidBytes(tableId))
+                .param("openedBy", uuidBytes(UUID.fromString("00000000-0000-0000-0000-000000000001")))
+                .update();
+    }
+
     static long countOf(JdbcClient jdbcClient, String table) {
         return jdbcClient
                 .sql("SELECT COUNT(*) FROM " + table)
                 .query(Long.class)
                 .single();
+    }
+
+    static byte[] uuidBytes(UUID value) {
+        ByteBuffer buffer = ByteBuffer.allocate(16);
+        buffer.putLong(value.getMostSignificantBits());
+        buffer.putLong(value.getLeastSignificantBits());
+        return buffer.array();
     }
 }

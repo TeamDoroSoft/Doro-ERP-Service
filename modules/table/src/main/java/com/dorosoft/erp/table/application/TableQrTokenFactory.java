@@ -23,6 +23,21 @@ class TableQrTokenFactory {
         return new GeneratedQrToken(token, digest);
     }
 
+    byte[] digestToken(String token) {
+        if (token == null || token.isBlank() || token.length() > 128) {
+            throw new IllegalArgumentException("Invalid QR token.");
+        }
+        byte[] tokenBytes = Base64.getUrlDecoder().decode(token);
+        try {
+            if (tokenBytes.length != TOKEN_BYTES) {
+                throw new IllegalArgumentException("Invalid QR token.");
+            }
+            return digest(tokenBytes);
+        } finally {
+            Arrays.fill(tokenBytes, (byte) 0);
+        }
+    }
+
     private static byte[] digest(byte[] tokenBytes) {
         try {
             return MessageDigest.getInstance("SHA-256").digest(tokenBytes);

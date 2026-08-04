@@ -25,4 +25,16 @@ class TableManagementSecurityConfiguration {
                 .formLogin(form -> form.disable())
                 .build();
     }
+
+    @Bean
+    @Order(1)
+    SecurityFilterChain tableQrPublicAccessSecurityFilterChain(HttpSecurity http) throws Exception {
+        return http.securityMatcher("/qr/table-access")
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .requestCache(cache -> cache.disable())
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
+                .build();
+    }
 }

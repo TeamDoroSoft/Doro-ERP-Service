@@ -17,11 +17,14 @@ dependencies {
     implementation(project(":platform:web"))
     implementation(project(":modules:identity"))
     implementation(project(":modules:audit"))
+    implementation(project(":modules:store"))
 
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     testImplementation(project(":test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.security:spring-security-test")
 }
 
 tasks.register("verifyNoTestSupportInRuntimeClasspath") {

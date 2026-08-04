@@ -150,6 +150,54 @@ public record AuditRecordCommand(
         );
     }
 
+    public static AuditRecordCommand storeProfileUpdated(
+            UUID operationId,
+            UUID storeId,
+            Map<String, Object> beforeValue,
+            Map<String, Object> afterValue
+    ) {
+        return store(
+                AuditAction.STORE_PROFILE_UPDATED,
+                operationId,
+                com.dorosoft.erp.audit.domain.AuditTargetType.STORE_PROFILE,
+                storeId,
+                beforeValue,
+                afterValue
+        );
+    }
+
+    public static AuditRecordCommand storeScheduleUpdated(
+            UUID operationId,
+            UUID storeId,
+            Map<String, Object> beforeValue,
+            Map<String, Object> afterValue
+    ) {
+        return store(
+                AuditAction.STORE_SCHEDULE_UPDATED,
+                operationId,
+                com.dorosoft.erp.audit.domain.AuditTargetType.STORE_SCHEDULE,
+                storeId,
+                beforeValue,
+                afterValue
+        );
+    }
+
+    public static AuditRecordCommand storeFeatureSettingsUpdated(
+            UUID operationId,
+            UUID storeId,
+            Map<String, Object> beforeValue,
+            Map<String, Object> afterValue
+    ) {
+        return store(
+                AuditAction.STORE_FEATURE_SETTINGS_UPDATED,
+                operationId,
+                com.dorosoft.erp.audit.domain.AuditTargetType.STORE_FEATURE_SETTINGS,
+                storeId,
+                beforeValue,
+                afterValue
+        );
+    }
+
     private static AuditRecordCommand identityAccountState(
             AuditAction action,
             UUID operationId,
@@ -190,6 +238,32 @@ public record AuditRecordCommand(
                 null,
                 reason,
                 1
+        );
+    }
+
+    private static AuditRecordCommand store(
+            AuditAction action,
+            UUID operationId,
+            com.dorosoft.erp.audit.domain.AuditTargetType targetType,
+            UUID storeId,
+            Map<String, Object> beforeValue,
+            Map<String, Object> afterValue
+    ) {
+        return new AuditRecordCommand(
+                AuditDomain.STORE,
+                action,
+                operationId,
+                0,
+                new AuditPrimaryTarget(targetType, storeId),
+                List.of(new AuditRelatedTarget(
+                        com.dorosoft.erp.audit.domain.AuditRelationType.STORE,
+                        com.dorosoft.erp.audit.domain.AuditTargetType.STORE_PROFILE,
+                        storeId)),
+                beforeValue,
+                afterValue,
+                null,
+                null,
+                2
         );
     }
 

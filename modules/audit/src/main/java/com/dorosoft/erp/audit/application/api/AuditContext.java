@@ -38,4 +38,24 @@ public record AuditContext(
                 occurredAt
         );
     }
+
+    public static AuditContext storeUser(
+            String tenantId,
+            UUID actorId,
+            String actorRoleCode,
+            String actorDisplayName,
+            String requestId,
+            Instant occurredAt
+    ) {
+        ActorType actorType = "ADMIN".equals(actorRoleCode) ? ActorType.ADMIN : ActorType.EMPLOYEE;
+        return new AuditContext(
+                tenantId,
+                actorType,
+                actorId,
+                actorRoleCode,
+                actorDisplayName,
+                requestId,
+                occurredAt
+        );
+    }
 }

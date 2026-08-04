@@ -74,6 +74,7 @@ public class IdentitySecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/sessions").permitAll()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/auth/sessions/current").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/store/availability").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(hostOriginValidationFilter, CsrfFilter.class)

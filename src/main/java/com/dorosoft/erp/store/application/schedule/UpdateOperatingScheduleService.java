@@ -9,8 +9,10 @@ import com.dorosoft.erp.store.application.audit.StoreAuditJsonWriter;
 import com.dorosoft.erp.store.application.audit.StoreAuditTargets;
 import com.dorosoft.erp.store.application.audit.StoreAuditValueMapper;
 import com.dorosoft.erp.store.application.exception.ClosedDayHasBusinessHoursException;
+import com.dorosoft.erp.store.application.exception.DuplicatePeriodOrderException;
 import com.dorosoft.erp.store.application.exception.DuplicateTemporaryClosureException;
 import com.dorosoft.erp.store.application.exception.OverlappingBusinessHoursException;
+import com.dorosoft.erp.store.application.exception.OverlappingServiceWindowException;
 import com.dorosoft.erp.store.application.exception.ServiceWindowOutsideBusinessHoursException;
 import com.dorosoft.erp.store.application.exception.StoreNotInitializedException;
 import com.dorosoft.erp.store.application.exception.StoreSettingsVersionConflictException;
@@ -97,6 +99,8 @@ public class UpdateOperatingScheduleService {
                 new ServiceWindowOutsideBusinessHoursException(exception);
             case CLOSED_DAY_HAS_BUSINESS_HOURS -> new ClosedDayHasBusinessHoursException(exception);
             case DUPLICATE_TEMPORARY_CLOSURE -> new DuplicateTemporaryClosureException(exception);
+            case OVERLAPPING_SERVICE_WINDOW -> new OverlappingServiceWindowException(exception);
+            case DUPLICATE_PERIOD_ORDER -> new DuplicatePeriodOrderException(exception);
         };
     }
 }

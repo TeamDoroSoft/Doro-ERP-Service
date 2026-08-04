@@ -41,7 +41,7 @@ public record AuditRecordCommand(
         beforeValue = beforeValue == null ? EMPTY_JSON_OBJECT : beforeValue;
         afterValue = afterValue == null ? EMPTY_JSON_OBJECT : afterValue;
 
-        if (reason != null && (reason.isEmpty() || reason.length() > REASON_MAX_LENGTH)) {
+        if (reason != null && (reason.isBlank() || reason.length() > REASON_MAX_LENGTH)) {
             throw new IllegalArgumentException("reason은 1~500자여야 한다");
         }
     }

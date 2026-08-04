@@ -177,6 +177,9 @@ class AuditContractTest {
                             () -> command("D", "A", "op", 0, TARGET, null, null, null, null, "", "v1"))
                     .isInstanceOf(IllegalArgumentException.class);
             assertThatThrownBy(
+                            () -> command("D", "A", "op", 0, TARGET, null, null, null, null, "   ", "v1"))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(
                             () ->
                                     command(
                                             "D",

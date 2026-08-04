@@ -121,6 +121,7 @@ class UpdateScheduleIntegrationTest {
                 Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"09:00\"}]", "[]", "[]", "{}"), "VALIDATION_FAILED", "businessHours.MONDAY[0]"),
                 Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"},{\"start\":\"13:00\",\"end\":\"18:00\"}]", "[]", "[]", "{}"), "OVERLAPPING_BUSINESS_HOURS", "businessHours.MONDAY"),
                 Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[]", "[]", "{\"ORDER\":{\"MONDAY\":[{\"start\":\"08:00\",\"end\":\"10:00\"}]}}"), "SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS", "serviceWindows.ORDER.MONDAY"),
+                Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"18:00\"}]", "[]", "[]", "{\"RESERVATION\":{\"MONDAY\":[{\"start\":\"10:00\",\"end\":\"14:00\"},{\"start\":\"12:00\",\"end\":\"16:00\"}]}}"), "OVERLAPPING_SERVICE_WINDOW", "serviceWindows.RESERVATION.MONDAY"),
                 Arguments.of(body("[{\"start\":\"09:00\",\"end\":\"14:00\"}]", "[\"MONDAY\"]", "[]", "{}"), "CLOSED_DAY_HAS_BUSINESS_HOURS", "businessHours.MONDAY"),
                 Arguments.of(body("[]", "[]", "[{\"date\":\"2026-08-15\",\"reason\":\"점검\"},{\"date\":\"2026-08-15\",\"reason\":\"휴무\"}]", "{}"), "DUPLICATE_TEMPORARY_CLOSURE", "temporaryClosures"));
     }
@@ -139,6 +140,17 @@ class UpdateScheduleIntegrationTest {
     void missingPermissionDoesNotChangeDatabase() throws Exception {
         update(validBody(), "store.settings.read", String.valueOf(initialVersion))
                 .andExpect(status().isForbidden());
+        assertScheduleUnchanged();
+    }
+
+    @Test
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(put("/api/v1/store-settings/schedule")
+                        .header("If-Match", "\"" + initialVersion + "\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         assertScheduleUnchanged();
     }
 

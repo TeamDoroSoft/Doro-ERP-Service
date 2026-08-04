@@ -92,16 +92,20 @@ public final class OperatingSchedule {
      * 스케줄 불변식 검증.
      *
      * <ol>
+     *   <li>같은 요일 또는 같은 서비스 타입·요일의 구간 order는 중복되지 않는다.
      *   <li>영업 구간끼리 겹치지 않는다.
      *   <li>모든 서비스 구간은 영업시간 합집합에 완전히 포함된다.
+     *   <li>같은 서비스 타입의 서비스 구간끼리 겹치지 않는다.
      *   <li>정기 휴무 요일에는 영업 구간·서비스 구간이 없다.
      *   <li>임시 휴무 날짜는 중복되지 않는다.
      * </ol>
      */
     public void validate() {
+        verifyNoDuplicatePeriodOrder();
         List<LabeledSegment> businessSegments = businessSegments();
         verifyNoBusinessOverlap(businessSegments);
         verifyServiceWindowsWithinBusinessHours(businessSegments);
+        verifyNoServiceWindowOverlap();
         verifyRegularClosedDaysHaveNoPeriod();
         verifyNoDuplicateTemporaryClosureDates();
     }
@@ -279,6 +283,72 @@ public final class OperatingSchedule {
                                     + "~"
                                     + window.end());
                 }
+            }
+        }
+    }
+
+    private void verifyNoServiceWindowOverlap() {
+        for (ServiceType serviceType : ServiceType.values()) {
+            List<LabeledSegment> segments = new ArrayList<>();
+            int groupId = 0;
+            for (ServiceWindow window : serviceWindows) {
+                if (window.serviceType() != serviceType) {
+                    continue;
+                }
+                String label = window.dayOfWeek() + " " + window.start() + "~" + window.end();
+                for (Segment segment : normalizeWeeklyIntervals(
+                        window.dayOfWeek(), window.start(), window.end())) {
+                    segments.add(new LabeledSegment(groupId, window.dayOfWeek(), label, segment));
+                }
+                groupId++;
+            }
+            verifyNoServiceWindowOverlap(serviceType, segments);
+        }
+    }
+
+    private static void verifyNoServiceWindowOverlap(
+            ServiceType serviceType, List<LabeledSegment> segments) {
+        for (int i = 0; i < segments.size(); i++) {
+            for (int j = i + 1; j < segments.size(); j++) {
+                LabeledSegment left = segments.get(i);
+                LabeledSegment right = segments.get(j);
+                if (left.groupId() == right.groupId()) {
+                    continue;
+                }
+                if (left.segment().overlaps(right.segment())) {
+                    throw new OperatingScheduleViolationException(
+                            OperatingScheduleViolationException.Reason.OVERLAPPING_SERVICE_WINDOW,
+                            "serviceWindows." + serviceType + "." + left.day(),
+                            "서비스 구간이 서로 겹칩니다: " + left.label() + " / " + right.label());
+                }
+            }
+        }
+    }
+
+    private void verifyNoDuplicatePeriodOrder() {
+        for (Map.Entry<DayOfWeek, List<BusinessPeriod>> entry : businessHours.entrySet()) {
+            Set<Integer> orders = new LinkedHashSet<>();
+            for (BusinessPeriod period : entry.getValue()) {
+                if (!orders.add(period.order())) {
+                    throw new OperatingScheduleViolationException(
+                            OperatingScheduleViolationException.Reason.DUPLICATE_PERIOD_ORDER,
+                            "businessHours." + entry.getKey(),
+                            "order 값이 중복됩니다: " + period.order());
+                }
+            }
+        }
+
+        Map<ServiceType, Map<DayOfWeek, Set<Integer>>> ordersByTypeAndDay =
+                new EnumMap<>(ServiceType.class);
+        for (ServiceWindow window : serviceWindows) {
+            Set<Integer> orders = ordersByTypeAndDay
+                    .computeIfAbsent(window.serviceType(), ignored -> new EnumMap<>(DayOfWeek.class))
+                    .computeIfAbsent(window.dayOfWeek(), ignored -> new LinkedHashSet<>());
+            if (!orders.add(window.order())) {
+                throw new OperatingScheduleViolationException(
+                        OperatingScheduleViolationException.Reason.DUPLICATE_PERIOD_ORDER,
+                        "serviceWindows." + window.serviceType() + "." + window.dayOfWeek(),
+                        "order 값이 중복됩니다: " + window.order());
             }
         }
     }

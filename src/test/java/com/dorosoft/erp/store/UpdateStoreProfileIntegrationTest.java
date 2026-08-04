@@ -131,8 +131,30 @@ class UpdateStoreProfileIntegrationTest {
         return Stream.of(
                 Arguments.of(validBody("   ", "Asia/Seoul"), "name"),
                 Arguments.of(validBody("x".repeat(101), "Asia/Seoul"), "name"),
+                Arguments.of(validBody("<script>alert(1)</script>", "Asia/Seoul"), "name"),
+                Arguments.of(
+                        "{\"name\":\"정상\",\"address\":\"서울시\\u0000중구\",\"contact\":\"02-1234-5678\",\"timeZone\":\"Asia/Seoul\"}",
+                        "address"),
                 Arguments.of(validBody("정상", "Not/AZone"), "timeZone"),
                 Arguments.of("{\"name\":\"정상\",\"address\":\"주소\",\"contact\":\"abc\",\"timeZone\":\"Asia/Seoul\"}", "contact"));
+    }
+
+    @Test
+    void acceptsNormalKoreanAddressWithPunctuation() throws Exception {
+        String address = "서울특별시 중구 예시로 1(2층)";
+
+        mockMvc.perform(put("/api/v1/store-settings/profile")
+                        .headers(actorHeaders("store.settings.update"))
+                        .header("If-Match", String.valueOf(initialVersion))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"정상 매장","address":"%s","contact":"02-1234-5678","timeZone":"Asia/Seoul"}
+                                """.formatted(address)))
+                .andExpect(status().isOk());
+
+        org.assertj.core.api.Assertions.assertThat(
+                        jdbcClient.sql("SELECT address FROM store_profile").query(String.class).single())
+                .isEqualTo(address);
     }
 
     @Test
@@ -153,6 +175,17 @@ class UpdateStoreProfileIntegrationTest {
                 String.valueOf(initialVersion),
                 validBody("변경 금지", "Asia/Seoul"),
                 403);
+        assertUnchanged();
+    }
+
+    @Test
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(put("/api/v1/store-settings/profile")
+                        .header("If-Match", "\"" + initialVersion + "\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody("변경 금지", "Asia/Seoul")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
         assertUnchanged();
     }
 

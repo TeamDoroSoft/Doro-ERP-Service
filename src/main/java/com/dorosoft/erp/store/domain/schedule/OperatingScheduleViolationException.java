@@ -7,7 +7,9 @@ public final class OperatingScheduleViolationException extends RuntimeException 
         OVERLAPPING_BUSINESS_HOURS,
         SERVICE_WINDOW_OUTSIDE_BUSINESS_HOURS,
         CLOSED_DAY_HAS_BUSINESS_HOURS,
-        DUPLICATE_TEMPORARY_CLOSURE
+        DUPLICATE_TEMPORARY_CLOSURE,
+        OVERLAPPING_SERVICE_WINDOW,
+        DUPLICATE_PERIOD_ORDER
     }
 
     private final Reason reason;

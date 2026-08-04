@@ -8,8 +8,8 @@ import jakarta.validation.constraints.Size;
 import java.time.ZoneId;
 
 public record UpdateStoreProfileRequest(
-        @NotBlank @Size(max = 100) String name,
-        @NotBlank @Size(max = 255) String address,
+        @NotBlank @Size(max = 100) @Pattern(regexp = "^[^<>\\p{Cntrl}]*$") String name,
+        @NotBlank @Size(max = 255) @Pattern(regexp = "^[^<>\\p{Cntrl}]*$") String address,
         @NotBlank @Size(max = 50) @Pattern(regexp = "^[0-9+\\-() .]+$") String contact,
         @ValidTimeZone String timeZone) {
 

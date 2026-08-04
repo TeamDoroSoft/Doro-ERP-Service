@@ -166,7 +166,10 @@ class AvailabilityPolicyTest {
                 OperatingSchedule.of(
                         Map.of(
                                 DayOfWeek.SUNDAY,
-                                List.of(period(1, 0, 1, 15), period(1, 45, 2, 0))),
+                                List.of(
+                                        period(1, 0, 1, 15),
+                                        new BusinessPeriod(
+                                                1, LocalTime.of(1, 45), LocalTime.of(2, 0)))),
                         Set.of(), Set.of(), Set.of());
         StoreSettings settings = settings(schedule, Set.of(FeatureCode.WAITING), zone);
         Instant reference = Instant.parse("2026-11-01T05:20:00Z");

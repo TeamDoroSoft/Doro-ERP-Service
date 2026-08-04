@@ -145,6 +145,17 @@ class UpdateFeatureSettingsIntegrationTest {
     }
 
     @Test
+    void unauthenticatedReturns401() throws Exception {
+        mockMvc.perform(put("/api/v1/store-settings/features")
+                        .header("If-Match", "\"" + initialVersion + "\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+        assertFeaturesUnchanged();
+    }
+
+    @Test
     void staleVersionDoesNotChangeDatabase() throws Exception {
         update(validBody(), "store.settings.update", String.valueOf(initialVersion + 10))
                 .andExpect(status().isConflict());

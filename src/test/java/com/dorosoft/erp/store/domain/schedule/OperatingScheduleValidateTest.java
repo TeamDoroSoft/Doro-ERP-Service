@@ -112,6 +112,133 @@ class OperatingScheduleValidateTest {
     }
 
     @Test
+    @DisplayName("같은 요일·타입의 서비스 구간이 겹치면 거부한다")
+    void rejectsOverlappingServiceWindowsWithinSameTypeAndDay() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(DayOfWeek.MONDAY, List.of(period(0, 9, 18))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(
+                                window(ServiceType.RESERVATION, DayOfWeek.MONDAY, 0, 10, 14),
+                                window(ServiceType.RESERVATION, DayOfWeek.MONDAY, 1, 12, 16)));
+
+        assertThatThrownBy(schedule::validate)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .OVERLAPPING_SERVICE_WINDOW);
+                            assertThat(exception.field())
+                                    .isEqualTo("serviceWindows.RESERVATION.MONDAY");
+                        })
+                .hasMessageContaining("서비스 구간이 서로 겹칩니다");
+    }
+
+    @Test
+    @DisplayName("같은 요일의 서로 다른 서비스 타입은 겹쳐도 통과한다")
+    void acceptsOverlappingServiceWindowsOfDifferentTypes() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(DayOfWeek.MONDAY, List.of(period(0, 9, 18))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(
+                                window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 10, 14),
+                                window(ServiceType.RESERVATION, DayOfWeek.MONDAY, 0, 12, 16)));
+
+        assertThatCode(schedule::validate).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("자정을 넘긴 서비스 구간이 다음 요일의 같은 타입 구간과 겹치면 거부한다")
+    void rejectsServiceWindowOverlapAcrossMidnight() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(DayOfWeek.MONDAY, List.of(period(0, 20, 6))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(
+                                window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 22, 2),
+                                window(ServiceType.ORDER, DayOfWeek.TUESDAY, 0, 1, 3)));
+
+        assertThatThrownBy(schedule::validate)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception ->
+                                assertThat(exception.reason())
+                                        .isEqualTo(
+                                                OperatingScheduleViolationException.Reason
+                                                        .OVERLAPPING_SERVICE_WINDOW));
+    }
+
+    @Test
+    @DisplayName("같은 요일의 영업시간 order가 중복되면 거부한다")
+    void rejectsDuplicateBusinessPeriodOrder() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(DayOfWeek.MONDAY, List.of(period(0, 9, 12), period(0, 13, 18))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of());
+
+        assertThatThrownBy(schedule::validate)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .DUPLICATE_PERIOD_ORDER);
+                            assertThat(exception.field()).isEqualTo("businessHours.MONDAY");
+                        })
+                .hasMessageContaining("order 값이 중복됩니다");
+    }
+
+    @Test
+    @DisplayName("같은 요일·타입의 서비스 구간 order가 중복되면 거부한다")
+    void rejectsDuplicateServiceWindowOrder() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(DayOfWeek.MONDAY, List.of(period(0, 9, 18))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(
+                                window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 9, 12),
+                                window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 13, 18)));
+
+        assertThatThrownBy(schedule::validate)
+                .isInstanceOfSatisfying(
+                        OperatingScheduleViolationException.class,
+                        exception -> {
+                            assertThat(exception.reason())
+                                    .isEqualTo(
+                                            OperatingScheduleViolationException.Reason
+                                                    .DUPLICATE_PERIOD_ORDER);
+                            assertThat(exception.field()).isEqualTo("serviceWindows.ORDER.MONDAY");
+                        });
+    }
+
+    @Test
+    @DisplayName("서로 다른 요일은 같은 order를 사용해도 통과한다")
+    void acceptsSameOrdersOnDifferentDays() {
+        OperatingSchedule schedule =
+                OperatingSchedule.of(
+                        Map.of(
+                                DayOfWeek.MONDAY, List.of(period(0, 9, 18)),
+                                DayOfWeek.TUESDAY, List.of(period(0, 9, 18))),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(
+                                window(ServiceType.ORDER, DayOfWeek.MONDAY, 0, 10, 12),
+                                window(ServiceType.ORDER, DayOfWeek.TUESDAY, 0, 10, 12)));
+
+        assertThatCode(schedule::validate).doesNotThrowAnyException();
+    }
+
+    @Test
     @DisplayName("정기 휴무 요일에 영업 구간이 있으면 거부한다")
     void rejectsBusinessPeriodOnRegularClosedDay() {
         OperatingSchedule schedule =

@@ -9,7 +9,12 @@ import com.dorosoft.erp.audit.domain.AuditPrimaryTarget;
 import com.dorosoft.erp.audit.domain.AuditRelatedTarget;
 import com.dorosoft.erp.audit.domain.AuditRelationType;
 import com.dorosoft.erp.audit.domain.AuditTargetType;
+import com.dorosoft.erp.table.application.dto.TableUsageSessionCloseResponse;
 import com.dorosoft.erp.table.application.dto.TableUsageSessionResponse;
+import com.dorosoft.erp.table.application.port.TableSessionCloseGuardReader;
+import com.dorosoft.erp.table.application.port.TableSessionCloseGuardReader.CloseGuardBlocker;
+import com.dorosoft.erp.table.application.port.TableSessionCloseGuardReader.CloseGuardQuery;
+import com.dorosoft.erp.table.application.port.TableSessionCloseGuardReader.CloseGuardResult;
 import com.dorosoft.erp.table.application.port.TableUsageSessionCommandRepository;
 import com.dorosoft.erp.table.application.port.TableUsageSessionCommandRepository.TableUsageSessionSnapshot;
 import com.dorosoft.erp.table.infrastructure.persistence.StoreTableEntity;
@@ -31,6 +36,7 @@ public class TableUsageSessionService {
 
     private final StoreTableJpaRepository tableRepository;
     private final TableUsageSessionCommandRepository sessionRepository;
+    private final TableSessionCloseGuardReader closeGuardReader;
     private final AuditWriter auditWriter;
     private final Clock clock;
     private final String tenantId;
@@ -38,11 +44,13 @@ public class TableUsageSessionService {
     public TableUsageSessionService(
             StoreTableJpaRepository tableRepository,
             TableUsageSessionCommandRepository sessionRepository,
+            TableSessionCloseGuardReader closeGuardReader,
             AuditWriter auditWriter,
             Clock clock,
             @Value("${doro.erp.tenant-id:local-store}") String tenantId) {
         this.tableRepository = tableRepository;
         this.sessionRepository = sessionRepository;
+        this.closeGuardReader = closeGuardReader;
         this.auditWriter = auditWriter;
         this.clock = clock;
         this.tenantId = tenantId;
@@ -68,6 +76,40 @@ public class TableUsageSessionService {
         TableUsageSessionSnapshot session = openSession(table.getTableId(), context.actorId(), clock.instant());
         recordAudit(session, context);
         return toResponse(session);
+    }
+
+    @Transactional
+    public TableUsageSessionCloseResponse close(UUID tableId, UUID sessionId, StartSessionContext context) {
+        if (!tenantId.equals(context.tenantId())) {
+            throw tableNotFound();
+        }
+        tableRepository.findByIdForUpdate(tableId).orElseThrow(TableUsageSessionService::tableNotFound);
+
+        TableUsageSessionSnapshot before =
+                sessionRepository
+                        .findByTableIdAndSessionIdForUpdate(tableId, sessionId)
+                        .orElseThrow(TableUsageSessionService::sessionNotFound);
+        if (!"OPEN".equals(before.status())) {
+            throw alreadyClosed();
+        }
+
+        Instant closedAt = clock.instant();
+        CloseGuardResult guardResult = closeGuardReader.inspect(new CloseGuardQuery(tableId, sessionId, closedAt));
+        if (guardResult == null) {
+            throw closeBlocked(
+                    List.of(
+                            new CloseGuardBlocker(
+                                    "UNKNOWN_ORDER_OR_PAYMENT_STATE",
+                                    "Order or payment state can not be determined.")));
+        }
+        if (!guardResult.canClose()) {
+            throw closeBlocked(guardResult.blockers());
+        }
+
+        TableUsageSessionSnapshot after =
+                sessionRepository.closeSession(tableId, sessionId, context.actorId(), closedAt, "NORMAL");
+        recordCloseAudit(before, after, context);
+        return toCloseResponse(after);
     }
 
     private TableUsageSessionSnapshot openSession(UUID tableId, UUID openedBy, Instant openedAt) {
@@ -114,9 +156,58 @@ public class TableUsageSessionService {
                         session.openedAt()));
     }
 
+    private void recordCloseAudit(
+            TableUsageSessionSnapshot before,
+            TableUsageSessionSnapshot after,
+            StartSessionContext context) {
+        AuditRecordCommand command =
+                AuditRecordCommand.builder()
+                        .domain(AuditDomain.ORDER)
+                        .action(AuditAction.TABLE_SESSION_CLOSED)
+                        .operationId(after.sessionId())
+                        .eventSequence(1)
+                        .primaryTarget(new AuditPrimaryTarget(AuditTargetType.TABLE_SESSION, after.sessionId()))
+                        .relatedTargets(
+                                List.of(
+                                        new AuditRelatedTarget(
+                                                AuditRelationType.TABLE,
+                                                AuditTargetType.TABLE,
+                                                after.tableId())))
+                        .beforeValue(sessionAuditValue(before))
+                        .afterValue(sessionAuditValue(after))
+                        .reasonCode("SESSION_CLOSED")
+                        .reason("Table usage closed normally.")
+                        .valueSchemaVersion(1)
+                        .build();
+        auditWriter.record(
+                command,
+                AuditContext.identityUser(
+                        context.tenantId(),
+                        context.actorId(),
+                        context.actorRoleCode(),
+                        context.actorDisplayName(),
+                        context.requestId(),
+                        after.closedAt()));
+    }
+
+    private static Map<String, Object> sessionAuditValue(TableUsageSessionSnapshot session) {
+        Map<String, Object> value = new LinkedHashMap<>();
+        value.put("tableId", session.tableId().toString());
+        value.put("status", session.status());
+        value.put("openedAt", session.openedAt().toString());
+        value.put("closedAt", session.closedAt() == null ? null : session.closedAt().toString());
+        value.put("version", session.version());
+        return value;
+    }
+
     private static TableUsageSessionResponse toResponse(TableUsageSessionSnapshot session) {
         return new TableUsageSessionResponse(
                 session.sessionId(), session.tableId(), session.status(), session.openedAt());
+    }
+
+    private static TableUsageSessionCloseResponse toCloseResponse(TableUsageSessionSnapshot session) {
+        return new TableUsageSessionCloseResponse(
+                session.sessionId(), session.tableId(), session.openedAt(), session.closedAt(), session.status());
     }
 
     private static TableManagementException tableNotFound() {
@@ -131,6 +222,24 @@ public class TableUsageSessionService {
                 HttpStatus.CONFLICT,
                 TableErrorCode.TABLE_SESSION_ALREADY_OPEN,
                 "Table already has an open session.");
+    }
+
+    private static TableManagementException sessionNotFound() {
+        return new TableManagementException(
+                HttpStatus.NOT_FOUND,
+                TableErrorCode.TABLE_SESSION_NOT_FOUND,
+                "Table session not found.");
+    }
+
+    private static TableManagementException alreadyClosed() {
+        return new TableManagementException(
+                HttpStatus.CONFLICT,
+                TableErrorCode.TABLE_SESSION_ALREADY_CLOSED,
+                "Table session is already closed.");
+    }
+
+    private static TableSessionCloseBlockedException closeBlocked(List<CloseGuardBlocker> blockers) {
+        return new TableSessionCloseBlockedException(blockers);
     }
 
     public record StartSessionContext(

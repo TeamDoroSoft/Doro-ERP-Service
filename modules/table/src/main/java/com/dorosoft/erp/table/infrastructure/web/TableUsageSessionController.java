@@ -52,6 +52,20 @@ class TableUsageSessionController {
                                 .body(service.start(tableId, context(authentication, servletRequest))));
     }
 
+    @PostMapping("/{sessionId}/close")
+    ResponseEntity<Object> close(
+            @PathVariable("tableId") UUID tableId,
+            @PathVariable("sessionId") UUID sessionId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
+            HttpServletRequest servletRequest,
+            Authentication authentication) {
+        return idempotencyService.execute(
+                idempotencyKey,
+                servletRequest,
+                Map.of(),
+                () -> ResponseEntity.ok(service.close(tableId, sessionId, context(authentication, servletRequest))));
+    }
+
     private StartSessionContext context(Authentication authentication, HttpServletRequest request) {
         if (authentication != null) {
             StartSessionContext principalContext = identityPrincipalContext(authentication.getPrincipal(), request);

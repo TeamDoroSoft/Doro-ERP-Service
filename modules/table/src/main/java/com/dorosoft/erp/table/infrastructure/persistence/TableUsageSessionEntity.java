@@ -58,6 +58,13 @@ class TableUsageSessionEntity {
         return new TableUsageSessionEntity(sessionId, tableId, openedBy, openedAt);
     }
 
+    void close(UUID closedBy, Instant closedAt, String closeReason) {
+        this.status = TableUsageSessionStatus.CLOSED;
+        this.closedBy = closedBy;
+        this.closedAt = closedAt;
+        this.closeReason = closeReason;
+    }
+
     UUID getSessionId() {
         return sessionId;
     }
@@ -72,6 +79,10 @@ class TableUsageSessionEntity {
 
     Instant getOpenedAt() {
         return openedAt;
+    }
+
+    Instant getClosedAt() {
+        return closedAt;
     }
 
     long getVersion() {

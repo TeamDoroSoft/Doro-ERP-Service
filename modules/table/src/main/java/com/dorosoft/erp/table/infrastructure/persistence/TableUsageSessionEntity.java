@@ -45,4 +45,36 @@ class TableUsageSessionEntity {
     private long version;
 
     protected TableUsageSessionEntity() {}
+
+    private TableUsageSessionEntity(UUID sessionId, UUID tableId, UUID openedBy, Instant openedAt) {
+        this.sessionId = sessionId;
+        this.tableId = tableId;
+        this.status = TableUsageSessionStatus.OPEN;
+        this.openedBy = openedBy;
+        this.openedAt = openedAt;
+    }
+
+    static TableUsageSessionEntity open(UUID sessionId, UUID tableId, UUID openedBy, Instant openedAt) {
+        return new TableUsageSessionEntity(sessionId, tableId, openedBy, openedAt);
+    }
+
+    UUID getSessionId() {
+        return sessionId;
+    }
+
+    UUID getTableId() {
+        return tableId;
+    }
+
+    TableUsageSessionStatus getStatus() {
+        return status;
+    }
+
+    Instant getOpenedAt() {
+        return openedAt;
+    }
+
+    long getVersion() {
+        return version;
+    }
 }

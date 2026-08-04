@@ -3,6 +3,7 @@ package com.dorosoft.erp.table.infrastructure.web;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -17,7 +18,14 @@ class TableManagementSecurityConfiguration {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(
                         auth ->
-                                auth.requestMatchers("/tables", "/tables/**")
+                                auth.requestMatchers(HttpMethod.POST, "/tables/*/sessions")
+                                        .hasAnyAuthority(
+                                                "ROLE_OWNER",
+                                                "ROLE_MANAGER",
+                                                "ROLE_ADMIN",
+                                                "ROLE_STAFF",
+                                                "table.session.manage")
+                                        .requestMatchers("/tables", "/tables/**")
                                         .hasAnyAuthority("ROLE_OWNER", "ROLE_MANAGER", "ROLE_ADMIN", "table.manage")
                                         .anyRequest()
                                         .permitAll())

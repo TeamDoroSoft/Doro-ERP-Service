@@ -15,7 +15,8 @@ import org.junit.jupiter.api.Test;
 class OrderTest {
 
     private static OrderItem item(long baseUnitPrice, int quantity) {
-        return OrderItem.create(UUID.randomUUID(), "아메리카노", baseUnitPrice, List.of(), quantity, false, 0L);
+        return OrderItem.create(
+                UUID.randomUUID().toString(), UUID.randomUUID(), "아메리카노", baseUnitPrice, List.of(), quantity, false, 0L);
     }
 
     @Test

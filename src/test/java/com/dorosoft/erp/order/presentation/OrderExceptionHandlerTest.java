@@ -2,6 +2,7 @@ package com.dorosoft.erp.order.presentation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.dorosoft.erp.order.domain.item.InvalidOrderItemsException;
 import com.dorosoft.erp.order.domain.item.InvalidQuantityException;
 import com.dorosoft.erp.order.domain.money.OrderAmountOverflowException;
 import com.dorosoft.erp.order.domain.order.EmptyOrderException;
@@ -29,6 +30,15 @@ class OrderExceptionHandlerTest {
     void mapsInvalidQuantity() {
         assertProblem(
                 handler.handleInvalidOrderItems(new InvalidQuantityException(0)),
+                HttpStatus.BAD_REQUEST,
+                "INVALID_ORDER_ITEMS");
+    }
+
+    @Test
+    @DisplayName("Item 구조·중복 위반은 400 INVALID_ORDER_ITEMS")
+    void mapsInvalidOrderItems() {
+        assertProblem(
+                handler.handleInvalidOrderItems(new InvalidOrderItemsException("invalid items")),
                 HttpStatus.BAD_REQUEST,
                 "INVALID_ORDER_ITEMS");
     }

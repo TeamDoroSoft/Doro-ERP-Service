@@ -1,5 +1,6 @@
 package com.dorosoft.erp.order.domain.order;
 
+import com.dorosoft.erp.order.domain.item.InvalidOrderItemsException;
 import com.dorosoft.erp.order.domain.item.OrderItem;
 import com.dorosoft.erp.order.domain.money.OrderAmount;
 import java.time.Instant;
@@ -10,6 +11,8 @@ import java.util.UUID;
 /** 주문 Aggregate Root. 신규 생성과 저장된 Snapshot 복원 경로를 분리한다. */
 public final class Order {
 
+    public static final int MAX_ITEMS = 100;
+
     private final UUID orderId;
     private final List<OrderItem> items;
     private final OrderAmount totalAmount;
@@ -19,6 +22,12 @@ public final class Order {
         this.orderId = Objects.requireNonNull(orderId, "orderId는 필수다");
         if (items == null || items.isEmpty()) {
             throw new EmptyOrderException();
+        }
+        if (items.size() > MAX_ITEMS) {
+            throw new InvalidOrderItemsException("주문 항목은 최대 " + MAX_ITEMS + "개까지 허용합니다");
+        }
+        if (items.stream().map(OrderItem::clientLineId).distinct().count() != items.size()) {
+            throw new InvalidOrderItemsException("같은 주문에서 clientLineId를 중복 사용할 수 없습니다");
         }
         this.items = List.copyOf(items);
         this.totalAmount = Objects.requireNonNull(totalAmount, "totalAmount는 필수다");

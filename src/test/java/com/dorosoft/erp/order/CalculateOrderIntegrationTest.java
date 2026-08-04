@@ -83,8 +83,8 @@ class CalculateOrderIntegrationTest {
         CalculateOrderCommand command =
                 new CalculateOrderCommand(
                         List.of(
-                                new OrderItemSelection(americano.productId(), List.of(optionId), 2),
-                                new OrderItemSelection(latte.productId(), List.of(), 1)));
+                                new OrderItemSelection("line-1", americano.productId(), List.of(optionId), 2),
+                                new OrderItemSelection("line-2", latte.productId(), List.of(), 1)));
 
         Order saved = calculateOrderService.calculate(command);
 
@@ -99,6 +99,7 @@ class CalculateOrderIntegrationTest {
         var americanoLine =
                 reloaded.items().stream().filter(i -> i.productId().equals(americano.productId())).findFirst().orElseThrow();
         assertThat(americanoLine.productName()).isEqualTo("아메리카노");
+        assertThat(americanoLine.clientLineId()).isEqualTo("line-1");
         assertThat(americanoLine.baseUnitPrice()).isEqualTo(4500L);
         assertThat(americanoLine.quantity()).isEqualTo(2);
         assertThat(americanoLine.price().unitPrice().amount()).isEqualTo(5000L);
@@ -122,7 +123,7 @@ class CalculateOrderIntegrationTest {
     void rejectsZeroQuantity() {
         Product americano = createProduct("아메리카노", 4500L);
         CalculateOrderCommand command =
-                new CalculateOrderCommand(List.of(new OrderItemSelection(americano.productId(), List.of(), 0)));
+                new CalculateOrderCommand(List.of(new OrderItemSelection("line-1", americano.productId(), List.of(), 0)));
 
         assertThatThrownBy(() -> calculateOrderService.calculate(command)).isInstanceOf(InvalidQuantityException.class);
 

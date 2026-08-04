@@ -3,6 +3,7 @@ package com.dorosoft.erp.order.domain.item;
 import com.dorosoft.erp.order.domain.money.OrderAmount;
 import com.dorosoft.erp.order.domain.price.OrderPrice;
 import com.dorosoft.erp.order.domain.price.OrderPriceCalculator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -15,7 +16,9 @@ public final class OrderItem {
 
     public static final int MIN_QUANTITY = 1;
     public static final int MAX_QUANTITY = 99;
+    public static final int MAX_CLIENT_LINE_ID_LENGTH = 50;
 
+    private final String clientLineId;
     private final UUID productId;
     private final String productName;
     private final long baseUnitPrice;
@@ -26,6 +29,7 @@ public final class OrderItem {
     private final long catalogRevision;
 
     private OrderItem(
+            String clientLineId,
             UUID productId,
             String productName,
             long baseUnitPrice,
@@ -34,6 +38,11 @@ public final class OrderItem {
             OrderPrice price,
             boolean stockManaged,
             long catalogRevision) {
+        if (clientLineId == null || clientLineId.isBlank() || clientLineId.length() > MAX_CLIENT_LINE_ID_LENGTH) {
+            throw new InvalidOrderItemsException(
+                    "clientLineId는 1~" + MAX_CLIENT_LINE_ID_LENGTH + "자의 식별자여야 합니다");
+        }
+        this.clientLineId = clientLineId;
         this.productId = Objects.requireNonNull(productId, "productId는 필수다");
         this.productName = Objects.requireNonNull(productName, "productName은 필수다");
         if (quantity < MIN_QUANTITY || quantity > MAX_QUANTITY) {
@@ -41,6 +50,11 @@ public final class OrderItem {
         }
         this.baseUnitPrice = baseUnitPrice;
         this.options = List.copyOf(Objects.requireNonNull(options, "options는 필수다"));
+        if (this.options.stream().map(OrderItemOption::optionId).anyMatch(Objects::isNull)
+                || new HashSet<>(this.options.stream().map(OrderItemOption::optionId).toList()).size()
+                        != this.options.size()) {
+            throw new InvalidOrderItemsException("같은 주문 항목에서 optionId를 중복 선택할 수 없습니다");
+        }
         this.quantity = quantity;
         this.price = Objects.requireNonNull(price, "price는 필수다");
         this.stockManaged = stockManaged;
@@ -49,6 +63,7 @@ public final class OrderItem {
 
     /** baseUnitPrice·옵션·수량으로 OrderPriceCalculator를 호출해 unitPrice·lineTotal을 계산한다. */
     public static OrderItem create(
+            String clientLineId,
             UUID productId,
             String productName,
             long baseUnitPrice,
@@ -62,11 +77,20 @@ public final class OrderItem {
         List<Long> additionalPrices = options.stream().map(OrderItemOption::additionalPrice).toList();
         OrderPrice price = OrderPriceCalculator.calculate(baseUnitPrice, additionalPrices, quantity);
         return new OrderItem(
-                productId, productName, baseUnitPrice, options, quantity, price, stockManaged, catalogRevision);
+                clientLineId,
+                productId,
+                productName,
+                baseUnitPrice,
+                options,
+                quantity,
+                price,
+                stockManaged,
+                catalogRevision);
     }
 
     /** DB에 저장된 주문 시점 단가와 줄 합계를 현재 계산식으로 다시 계산하지 않고 복원한다. */
     public static OrderItem restore(
+            String clientLineId,
             UUID productId,
             String productName,
             long baseUnitPrice,
@@ -78,7 +102,19 @@ public final class OrderItem {
             long catalogRevision) {
         OrderPrice storedPrice = new OrderPrice(OrderAmount.of(unitPrice), OrderAmount.of(lineTotal));
         return new OrderItem(
-                productId, productName, baseUnitPrice, options, quantity, storedPrice, stockManaged, catalogRevision);
+                clientLineId,
+                productId,
+                productName,
+                baseUnitPrice,
+                options,
+                quantity,
+                storedPrice,
+                stockManaged,
+                catalogRevision);
+    }
+
+    public String clientLineId() {
+        return clientLineId;
     }
 
     public UUID productId() {

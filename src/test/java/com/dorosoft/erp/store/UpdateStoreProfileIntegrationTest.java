@@ -66,15 +66,29 @@ class UpdateStoreProfileIntegrationTest {
                         .headers(actorHeaders("store.settings.update"))
                         .header("If-Match", "\"" + initialVersion + "\"")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validBody("  새 매장  ", "Asia/Seoul")))
+                        .content("""
+                                {"name":"기준 매장","address":"서울시 중구","contact":"02-1234-5678","timeZone":"Asia/Seoul"}
+                                """))
+                .andExpect(status().isOk());
+
+        jdbcClient.sql("DELETE FROM audit_record_target").update();
+        jdbcClient.sql("DELETE FROM audit_record").update();
+
+        mockMvc.perform(put("/api/v1/store-settings/profile")
+                        .headers(actorHeaders("store.settings.update"))
+                        .header("If-Match", "\"" + (initialVersion + 1) + "\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"  새 매장  ","address":"서울시 중구","contact":"02-1234-5678","timeZone":"Asia/Seoul"}
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profile.name").value("새 매장"))
-                .andExpect(jsonPath("$.data.version").value(initialVersion + 1));
+                .andExpect(jsonPath("$.data.version").value(initialVersion + 2));
 
         String name = jdbcClient.sql("SELECT name FROM store_profile").query(String.class).single();
         Long version = jdbcClient.sql("SELECT version FROM store_profile").query(Long.class).single();
         org.assertj.core.api.Assertions.assertThat(name).isEqualTo("새 매장");
-        org.assertj.core.api.Assertions.assertThat(version).isEqualTo(initialVersion + 1);
+        org.assertj.core.api.Assertions.assertThat(version).isEqualTo(initialVersion + 2);
         org.assertj.core.api.Assertions.assertThat(jdbcClient
                         .sql("SELECT COUNT(*) FROM audit_record WHERE domain='STORE' AND action='STORE_PROFILE_UPDATED'")
                         .query(Long.class).single())
@@ -83,6 +97,21 @@ class UpdateStoreProfileIntegrationTest {
                         .sql("SELECT COUNT(*) FROM audit_record_target WHERE relation_type='PRIMARY'")
                         .query(Long.class).single())
                 .isEqualTo(1L);
+        assertProfileAudit("[\"name\"]");
+    }
+
+    @Test
+    void writesOnlyAddressAndContactAsChangedFieldNames() throws Exception {
+        mockMvc.perform(put("/api/v1/store-settings/profile")
+                        .headers(actorHeaders("store.settings.update"))
+                        .header("If-Match", String.valueOf(initialVersion))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"미설정","address":"새 주소","contact":"031-111-2222","timeZone":"Asia/Seoul"}
+                                """))
+                .andExpect(status().isOk());
+
+        assertProfileAudit("[\"address\", \"contact\"]");
     }
 
     @ParameterizedTest
@@ -176,6 +205,36 @@ class UpdateStoreProfileIntegrationTest {
         org.assertj.core.api.Assertions.assertThat(
                         jdbcClient.sql("SELECT version FROM store_profile").query(Long.class).single())
                 .isEqualTo(initialVersion);
+    }
+
+    private void assertProfileAudit(String expectedChangedFields) {
+        org.assertj.core.api.Assertions.assertThat(jdbcClient.sql("""
+                        SELECT JSON_LENGTH(JSON_KEYS(after_value)) = 4
+                           AND JSON_CONTAINS(
+                               JSON_KEYS(after_value),
+                               JSON_ARRAY('storeName','timeZone','changedFields','version'))
+                           AND JSON_CONTAINS_PATH(after_value, 'one', '$.address', '$.contact') = 0
+                           AND value_schema_version = '2'
+                           AND JSON_EXTRACT(after_value, '$.changedFields') = JSON_EXTRACT(?, '$')
+                        FROM audit_record
+                        WHERE action = 'STORE_PROFILE_UPDATED'
+                        """).param(expectedChangedFields).query(Integer.class).single())
+                .isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*)
+                        FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_PROFILE_UPDATED'
+                          AND ((t.relation_type = 'PRIMARY' AND t.target_type = 'STORE_PROFILE')
+                            OR (t.relation_type = 'STORE' AND t.target_type = 'STORE_PROFILE'))
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
+        org.assertj.core.api.Assertions.assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_PROFILE_UPDATED'
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
     }
 
     private static String validBody(String name, String timeZone) {

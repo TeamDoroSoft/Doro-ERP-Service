@@ -2,13 +2,13 @@ package com.dorosoft.erp.store.application.feature;
 
 import com.dorosoft.erp.audit.application.api.AuditContext;
 import com.dorosoft.erp.audit.application.api.AuditRecordCommand;
-import com.dorosoft.erp.audit.application.api.AuditRelatedTarget;
-import com.dorosoft.erp.audit.application.api.AuditRelationType;
-import com.dorosoft.erp.audit.application.api.AuditTarget;
 import com.dorosoft.erp.audit.application.api.AuditTargetType;
 import com.dorosoft.erp.audit.application.api.AuditWriter;
 import com.dorosoft.erp.platform.web.error.FieldError;
 import com.dorosoft.erp.shared.security.ActorContext;
+import com.dorosoft.erp.store.application.audit.StoreAuditJsonWriter;
+import com.dorosoft.erp.store.application.audit.StoreAuditTargets;
+import com.dorosoft.erp.store.application.audit.StoreAuditValueMapper;
 import com.dorosoft.erp.store.application.exception.InvalidSettingCodeException;
 import com.dorosoft.erp.store.application.exception.StoreNotInitializedException;
 import com.dorosoft.erp.store.application.exception.StoreSettingsVersionConflictException;
@@ -16,31 +16,28 @@ import com.dorosoft.erp.store.application.port.StoreSettingsRepository;
 import com.dorosoft.erp.store.domain.feature.FeatureCode;
 import com.dorosoft.erp.store.domain.feature.FeatureSettings;
 import com.dorosoft.erp.store.domain.settings.StoreSettings;
-import com.dorosoft.erp.store.application.dto.StoreSettingsWebMapper;
 import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class UpdateFeatureSettingsService {
 
     private final StoreSettingsRepository repository;
     private final AuditWriter auditWriter;
-    private final ObjectMapper objectMapper;
+    private final StoreAuditJsonWriter jsonWriter;
     private final Clock clock;
 
     public UpdateFeatureSettingsService(
             StoreSettingsRepository repository,
             AuditWriter auditWriter,
-            ObjectMapper objectMapper,
+            StoreAuditJsonWriter jsonWriter,
             Clock clock) {
         this.repository = repository;
         this.auditWriter = auditWriter;
-        this.objectMapper = objectMapper;
+        this.jsonWriter = jsonWriter;
         this.clock = clock;
     }
 
@@ -60,26 +57,28 @@ public class UpdateFeatureSettingsService {
                     exception.getMessage(),
                     List.of(new FieldError(missingField(command), "MISSING_SETTING_CODE")));
         }
+        long beforeVersion = current.version();
         current.replaceFeatures(after);
         StoreSettings saved = repository.save(current);
 
-        String storeId = saved.storeId().toString();
+        String operationId =
+                requestId != null && !requestId.isBlank()
+                        ? requestId
+                        : "op-" + UUID.randomUUID();
         auditWriter.record(
                 new AuditRecordCommand(
                         "STORE",
                         "STORE_FEATURE_SETTINGS_UPDATED",
-                        UUID.randomUUID().toString(),
+                        operationId,
                         0,
-                        new AuditTarget(AuditTargetType.STORE_FEATURE_SETTINGS, storeId),
-                        List.of(new AuditRelatedTarget(
-                                AuditRelationType.STORE,
-                                AuditTargetType.STORE_FEATURE_SETTINGS,
-                                storeId)),
-                        toJson(before),
-                        toJson(after),
+                        StoreAuditTargets.primary(
+                                AuditTargetType.STORE_FEATURE_SETTINGS, saved.storeId()),
+                        StoreAuditTargets.related(saved.storeId()),
+                        jsonWriter.toJson(StoreAuditValueMapper.features(before, beforeVersion)),
+                        jsonWriter.toJson(StoreAuditValueMapper.features(after, saved.version())),
                         null,
                         null,
-                        "1"),
+                        "2"),
                 new AuditContext(actor.actorId(), actor.actorRole(), clock.instant(), requestId));
         return saved;
     }
@@ -92,13 +91,5 @@ public class UpdateFeatureSettingsService {
             }
         }
         return "notificationEvents";
-    }
-
-    private String toJson(FeatureSettings features) {
-        try {
-            return objectMapper.writeValueAsString(StoreSettingsWebMapper.toFeatureResponse(features));
-        } catch (JacksonException exception) {
-            throw new IllegalStateException("매장 기능 설정 감사 값을 JSON으로 변환할 수 없습니다", exception);
-        }
     }
 }

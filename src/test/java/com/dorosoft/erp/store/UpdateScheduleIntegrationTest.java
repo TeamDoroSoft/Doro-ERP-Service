@@ -81,6 +81,7 @@ class UpdateScheduleIntegrationTest {
                         .query(Long.class)
                         .single())
                 .isEqualTo(1L);
+        assertScheduleAudit();
     }
 
     @Test
@@ -180,6 +181,36 @@ class UpdateScheduleIntegrationTest {
         assertThat(currentVersion()).isEqualTo(initialVersion);
     }
 
+    private void assertScheduleAudit() {
+        assertThat(jdbcClient.sql("""
+                        SELECT JSON_LENGTH(JSON_KEYS(after_value)) = 5
+                           AND JSON_CONTAINS(
+                               JSON_KEYS(after_value),
+                               JSON_ARRAY('businessHours','regularClosedDays','temporaryClosures','serviceWindows','version'))
+                           AND JSON_CONTAINS_PATH(after_value, 'one', '$.temporaryClosures[0].reason') = 0
+                           AND JSON_UNQUOTE(JSON_EXTRACT(
+                               after_value, '$.temporaryClosures[0].reasonCode')) = 'OTHER'
+                           AND JSON_SEARCH(after_value, 'one', '%010%') IS NULL
+                           AND value_schema_version = '2'
+                        FROM audit_record WHERE action = 'STORE_SCHEDULE_UPDATED'
+                        """).query(Integer.class).single())
+                .isEqualTo(1);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_SCHEDULE_UPDATED'
+                          AND ((t.relation_type = 'PRIMARY' AND t.target_type = 'STORE_SCHEDULE')
+                            OR (t.relation_type = 'STORE' AND t.target_type = 'STORE_PROFILE'))
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_SCHEDULE_UPDATED'
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
+    }
+
     private long count(String table) {
         return StoreIntegrationSupport.countOf(jdbcClient, table);
     }
@@ -192,7 +223,7 @@ class UpdateScheduleIntegrationTest {
         return body(
                 "[{\"start\":\"09:00\",\"end\":\"14:00\"},{\"start\":\"15:00\",\"end\":\"22:00\"}]",
                 "[\"SUNDAY\"]",
-                "[{\"date\":\"2026-08-15\",\"reason\":\"시설 점검\"}]",
+                "[{\"date\":\"2026-08-15\",\"reason\":\"시설 점검 010-1234-5678\"}]",
                 "{\"ORDER\":{\"MONDAY\":[{\"start\":\"09:30\",\"end\":\"13:30\"}]},\"RESERVATION\":{\"MONDAY\":[{\"start\":\"15:30\",\"end\":\"21:30\"}]}}");
     }
 

@@ -83,6 +83,7 @@ class UpdateFeatureSettingsIntegrationTest {
                         .query(Long.class)
                         .single())
                 .isEqualTo(1L);
+        assertFeatureAudit();
     }
 
     @ParameterizedTest
@@ -180,6 +181,33 @@ class UpdateFeatureSettingsIntegrationTest {
         assertThat(count("notification_event_setting")).isEqualTo(13L);
         assertThat(enabledCount("notification_event_setting")).isZero();
         assertThat(currentVersion()).isEqualTo(initialVersion);
+    }
+
+    private void assertFeatureAudit() {
+        assertThat(jdbcClient.sql("""
+                        SELECT JSON_LENGTH(JSON_KEYS(after_value)) = 3
+                           AND JSON_CONTAINS(
+                               JSON_KEYS(after_value),
+                               JSON_ARRAY('featureSettings','notificationEventSettings','version'))
+                           AND value_schema_version = '2'
+                        FROM audit_record
+                        WHERE action = 'STORE_FEATURE_SETTINGS_UPDATED'
+                        """).query(Integer.class).single())
+                .isEqualTo(1);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_FEATURE_SETTINGS_UPDATED'
+                          AND ((t.relation_type = 'PRIMARY' AND t.target_type = 'STORE_FEATURE_SETTINGS')
+                            OR (t.relation_type = 'STORE' AND t.target_type = 'STORE_PROFILE'))
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
+        assertThat(jdbcClient.sql("""
+                        SELECT COUNT(*) FROM audit_record_target t
+                        JOIN audit_record r ON r.audit_id = t.audit_id
+                        WHERE r.action = 'STORE_FEATURE_SETTINGS_UPDATED'
+                        """).query(Long.class).single())
+                .isEqualTo(2L);
     }
 
     private long count(String table) {

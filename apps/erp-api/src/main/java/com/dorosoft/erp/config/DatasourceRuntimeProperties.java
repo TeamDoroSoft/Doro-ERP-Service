@@ -1,20 +1,14 @@
 package com.dorosoft.erp.config;
 
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
 
 @ConfigurationProperties(prefix = "spring.datasource")
-@Validated
 public class DatasourceRuntimeProperties {
 
-    @NotBlank
     private String url;
 
-    @NotBlank
     private String username;
 
-    @NotBlank
     private String password;
 
     public String getUrl() {

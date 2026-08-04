@@ -31,7 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
-public final class JdbcAuditRepository implements AuditAppendPort, AuditReadPort, PrivacyAccessAppendPort {
+public class JdbcAuditRepository implements AuditAppendPort, AuditReadPort, PrivacyAccessAppendPort {
     private static final TypeReference<Map<String, Object>> JSON_MAP = new TypeReference<>() { };
 
     private final JdbcTemplate jdbc;

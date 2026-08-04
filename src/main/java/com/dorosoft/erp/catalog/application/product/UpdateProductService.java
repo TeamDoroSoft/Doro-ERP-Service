@@ -31,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class UpdateProductService {
 
     private static final String VALUE_SCHEMA_VERSION = "v1";
-    private static final String CURRENCY = "KRW";
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
@@ -121,7 +120,7 @@ public class UpdateProductService {
                         VALUE_SCHEMA_VERSION),
                 auditContext);
 
-        if (before.basePrice() != after.basePrice()) {
+        if (!before.basePrice().equals(after.basePrice())) {
             auditWriter.record(
                     new AuditRecordCommand(
                             "CATALOG",
@@ -131,9 +130,15 @@ public class UpdateProductService {
                             target,
                             null,
                             CatalogAuditValues.write(
-                                    CatalogAuditValues.map("basePrice", before.basePrice(), "currency", CURRENCY, "version", before.version())),
+                                    CatalogAuditValues.map(
+                                            "basePrice", before.basePrice().amount(),
+                                            "currency", before.basePrice().currency(),
+                                            "version", before.version())),
                             CatalogAuditValues.write(
-                                    CatalogAuditValues.map("basePrice", after.basePrice(), "currency", CURRENCY, "version", after.version())),
+                                    CatalogAuditValues.map(
+                                            "basePrice", after.basePrice().amount(),
+                                            "currency", after.basePrice().currency(),
+                                            "version", after.version())),
                             null,
                             null,
                             VALUE_SCHEMA_VERSION),

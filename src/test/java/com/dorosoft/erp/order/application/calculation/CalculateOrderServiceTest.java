@@ -9,6 +9,7 @@ import com.dorosoft.erp.order.domain.item.InvalidOrderItemsException;
 import com.dorosoft.erp.order.domain.item.InvalidQuantityException;
 import com.dorosoft.erp.order.domain.order.EmptyOrderException;
 import com.dorosoft.erp.order.domain.order.Order;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.IntStream;
@@ -118,6 +119,17 @@ class CalculateOrderServiceTest {
 
         assertThatThrownBy(() -> service.calculate(new CalculateOrderCommand(List.of(item))))
                 .isInstanceOf(InvalidOrderItemsException.class);
+    }
+
+    @Test
+    @DisplayName("null Option ID는 INVALID_ORDER_ITEMS")
+    void rejectsNullOptionId() {
+        assertThatThrownBy(
+                        () ->
+                                new OrderItemSelection(
+                                        "line-1", UUID.randomUUID(), Collections.singletonList(null), 1))
+                .isInstanceOf(InvalidOrderItemsException.class)
+                .hasMessage("optionId는 필수입니다");
     }
 
     @Test

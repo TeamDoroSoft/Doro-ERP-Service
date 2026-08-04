@@ -31,7 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
-public final class AuthorizationController {
+public class AuthorizationController {
     private static final String CLEAR_SESSION_COOKIE =
             "__Host-ERPSESSION=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0";
 

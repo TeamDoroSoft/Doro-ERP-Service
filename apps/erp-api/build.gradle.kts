@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":modules:identity"))
     implementation(project(":modules:audit"))
     implementation(project(":modules:store"))
+    implementation(project(":modules:table"))
 
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 

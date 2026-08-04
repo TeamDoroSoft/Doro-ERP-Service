@@ -2,9 +2,12 @@ package com.dorosoft.erp.identity.infrastructure.security;
 
 import com.dorosoft.erp.identity.application.authentication.IdentityDeniedPrivacyAccessHandler;
 import com.dorosoft.erp.identity.infrastructure.session.AbsoluteSessionExpirationFilter;
+import jakarta.servlet.Filter;
 import java.time.Clock;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -45,6 +48,28 @@ public class IdentitySecurityConfiguration {
     }
 
     @Bean
+    FilterRegistrationBean<HostOriginValidationFilter> identityHostOriginValidationFilterRegistration(
+            HostOriginValidationFilter filter
+    ) {
+        return disabledFilterRegistration(filter);
+    }
+
+    @Bean
+    FilterRegistrationBean<AbsoluteSessionExpirationFilter> identityAbsoluteSessionExpirationFilterRegistration(
+            AbsoluteSessionExpirationFilter filter
+    ) {
+        return disabledFilterRegistration(filter);
+    }
+
+    @Bean
+    FilterRegistrationBean<PasswordChangeRequiredFilter> identityPasswordChangeRequiredFilterRegistration(
+            PasswordChangeRequiredFilter filter
+    ) {
+        return disabledFilterRegistration(filter);
+    }
+
+    @Bean
+    @Order(100)
     SecurityFilterChain identitySecurityFilterChain(
             HttpSecurity http,
             SessionCsrfTokenRepository csrfTokenRepository,
@@ -58,6 +83,7 @@ public class IdentitySecurityConfiguration {
         csrfRequestHandler.setCsrfRequestAttributeName("_csrf");
 
         http
+                .securityMatcher("/api/v1/**", "/actuator/**")
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .logout(logout -> logout.disable())
@@ -81,5 +107,11 @@ public class IdentitySecurityConfiguration {
                 .addFilterAfter(absoluteSessionExpirationFilter, SecurityContextHolderFilter.class)
                 .addFilterBefore(passwordChangeRequiredFilter, AuthorizationFilter.class);
         return http.build();
+    }
+
+    private static <T extends Filter> FilterRegistrationBean<T> disabledFilterRegistration(T filter) {
+        FilterRegistrationBean<T> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 }

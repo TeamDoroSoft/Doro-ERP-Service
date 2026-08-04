@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
-public final class EmployeeAccountController {
+public class EmployeeAccountController {
     private static final String IF_MATCH = "If-Match";
     private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
     private static final String CLEAR_SESSION_COOKIE =

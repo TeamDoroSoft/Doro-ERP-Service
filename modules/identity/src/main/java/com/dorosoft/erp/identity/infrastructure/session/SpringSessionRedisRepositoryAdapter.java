@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -32,6 +33,7 @@ public final class SpringSessionRedisRepositoryAdapter implements SessionIssuer,
     private final SecureRandom secureRandom;
 
     @SuppressWarnings({"rawtypes", "unchecked"})
+    @Autowired
     public SpringSessionRedisRepositoryAdapter(
             FindByIndexNameSessionRepository repository,
             Clock clock

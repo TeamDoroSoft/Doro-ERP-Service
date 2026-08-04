@@ -26,11 +26,17 @@ class OrderItemEntity {
     @Column(name = "client_line_id", nullable = false, length = 50)
     private String clientLineId;
 
+    @Column(name = "line_order", nullable = false)
+    private int lineOrder;
+
     @Column(name = "product_name", nullable = false, length = 100)
     private String productName;
 
     @Column(name = "base_unit_price", nullable = false)
     private long baseUnitPrice;
+
+    @Column(name = "option_unit_amount", nullable = false)
+    private long optionUnitAmount;
 
     @Column(name = "unit_price", nullable = false)
     private long unitPrice;
@@ -56,9 +62,11 @@ class OrderItemEntity {
     OrderItemEntity(
             UUID orderItemId,
             String clientLineId,
+            int lineOrder,
             UUID productId,
             String productName,
             long baseUnitPrice,
+            long optionUnitAmount,
             long unitPrice,
             int quantity,
             long lineAmount,
@@ -66,9 +74,11 @@ class OrderItemEntity {
             long catalogRevision) {
         this.orderItemId = orderItemId;
         this.clientLineId = clientLineId;
+        this.lineOrder = lineOrder;
         this.productId = productId;
         this.productName = productName;
         this.baseUnitPrice = baseUnitPrice;
+        this.optionUnitAmount = optionUnitAmount;
         this.unitPrice = unitPrice;
         this.quantity = quantity;
         this.lineAmount = lineAmount;
@@ -99,6 +109,10 @@ class OrderItemEntity {
 
     long getBaseUnitPrice() {
         return baseUnitPrice;
+    }
+
+    long getOptionUnitAmount() {
+        return optionUnitAmount;
     }
 
     long getUnitPrice() {

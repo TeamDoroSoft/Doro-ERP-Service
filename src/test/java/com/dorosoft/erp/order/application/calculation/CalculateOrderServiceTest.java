@@ -134,4 +134,13 @@ class CalculateOrderServiceTest {
                                         List.of(new OrderItemSelection("x".repeat(51), UUID.randomUUID(), List.of(), 1)))))
                 .isInstanceOf(InvalidOrderItemsException.class);
     }
+
+    @Test
+    @DisplayName("productId 누락은 Catalog 조회 전에 INVALID_ORDER_ITEMS")
+    void rejectsMissingProductId() {
+        OrderItemSelection item = new OrderItemSelection("line-1", null, List.of(), 1);
+
+        assertThatThrownBy(() -> service.calculate(new CalculateOrderCommand(List.of(item))))
+                .isInstanceOf(InvalidOrderItemsException.class);
+    }
 }

@@ -8,7 +8,9 @@ import com.dorosoft.erp.catalog.application.category.CreateCategoryService;
 import com.dorosoft.erp.catalog.application.port.audit.AuditContext;
 import com.dorosoft.erp.catalog.application.product.CreateProductCommand;
 import com.dorosoft.erp.catalog.application.product.CreateProductService;
+import com.dorosoft.erp.catalog.application.product.ReplaceProductBasicInfoCommand;
 import com.dorosoft.erp.catalog.application.product.ReplaceProductOptionsService;
+import com.dorosoft.erp.catalog.application.product.UpdateProductService;
 import com.dorosoft.erp.catalog.domain.category.Category;
 import com.dorosoft.erp.catalog.domain.product.Product;
 import com.dorosoft.erp.catalog.domain.product.ProductOptionRequest;
@@ -40,6 +42,7 @@ class CalculateOrderIntegrationTest {
     @Autowired private CreateCategoryService createCategoryService;
     @Autowired private CreateProductService createProductService;
     @Autowired private ReplaceProductOptionsService replaceProductOptionsService;
+    @Autowired private UpdateProductService updateProductService;
     @Autowired private CalculateOrderService calculateOrderService;
     @Autowired private OrderRepository orderRepository;
     @Autowired private JdbcClient jdbcClient;
@@ -90,11 +93,22 @@ class CalculateOrderIntegrationTest {
 
         assertThat(saved.totalAmount().amount()).isEqualTo(15000L); // (4500+500)*2 + 5000*1
         assertThat(saved.items()).hasSize(2);
+        assertThat(saved.items()).extracting(item -> item.clientLineId()).containsExactly("line-1", "line-2");
+        List<UUID> savedLineIds = saved.items().stream().map(item -> item.lineId()).toList();
+
+        updateProductService.replaceBasicInfo(
+                americano.productId(),
+                new ReplaceProductBasicInfoCommand(
+                        categoryId, "변경된 아메리카노", null, 6000L, null, null, true, false),
+                withOption.version(),
+                auditContext);
 
         Order reloaded =
                 transactionTemplate.execute(status -> orderRepository.findById(saved.orderId()).orElseThrow());
         assertThat(reloaded.totalAmount().amount()).isEqualTo(15000L);
         assertThat(reloaded.items()).hasSize(2);
+        assertThat(reloaded.items()).extracting(item -> item.clientLineId()).containsExactly("line-1", "line-2");
+        assertThat(reloaded.items()).extracting(item -> item.lineId()).containsExactlyElementsOf(savedLineIds);
 
         var americanoLine =
                 reloaded.items().stream().filter(i -> i.productId().equals(americano.productId())).findFirst().orElseThrow();
@@ -103,6 +117,7 @@ class CalculateOrderIntegrationTest {
         assertThat(americanoLine.baseUnitPrice()).isEqualTo(4500L);
         assertThat(americanoLine.quantity()).isEqualTo(2);
         assertThat(americanoLine.price().unitPrice().amount()).isEqualTo(5000L);
+        assertThat(americanoLine.price().optionUnitAmount().amount()).isEqualTo(500L);
         assertThat(americanoLine.price().lineTotal().amount()).isEqualTo(10000L);
         assertThat(americanoLine.options()).hasSize(1);
         assertThat(americanoLine.options().get(0).optionName()).isEqualTo("샷 추가");

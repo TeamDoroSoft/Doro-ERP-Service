@@ -16,6 +16,7 @@ class OrderPriceCalculatorTest {
     void unitPriceWithoutOptions() {
         OrderPrice price = OrderPriceCalculator.calculate(4500L, List.of(), 2);
 
+        assertThat(price.optionUnitAmount().amount()).isZero();
         assertThat(price.unitPrice().amount()).isEqualTo(4500L);
         assertThat(price.lineTotal().amount()).isEqualTo(9000L);
     }
@@ -25,6 +26,7 @@ class OrderPriceCalculatorTest {
     void unitPriceSumsAdditionalPrices() {
         OrderPrice price = OrderPriceCalculator.calculate(4500L, List.of(500L, 300L), 1);
 
+        assertThat(price.optionUnitAmount().amount()).isEqualTo(800L);
         assertThat(price.unitPrice().amount()).isEqualTo(5300L);
         assertThat(price.lineTotal().amount()).isEqualTo(5300L);
     }

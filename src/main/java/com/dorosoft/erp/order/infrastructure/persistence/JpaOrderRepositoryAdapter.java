@@ -7,6 +7,7 @@ import com.dorosoft.erp.order.domain.order.Order;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.springframework.stereotype.Repository;
 
 /** JPA 엔티티와 도메인 Order Aggregate 사이의 변환을 전담한다. 엔티티는 이 패키지 밖으로 나가지 않는다. */
@@ -35,17 +36,21 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
     }
 
     private static List<OrderItemEntity> toItemEntities(List<OrderItem> items) {
-        return items.stream().map(JpaOrderRepositoryAdapter::toItemEntity).toList();
+        return IntStream.range(0, items.size())
+                .mapToObj(index -> toItemEntity(items.get(index), index))
+                .toList();
     }
 
-    private static OrderItemEntity toItemEntity(OrderItem item) {
+    private static OrderItemEntity toItemEntity(OrderItem item, int lineOrder) {
         OrderItemEntity entity =
                 new OrderItemEntity(
-                        UUID.randomUUID(),
+                        item.lineId(),
                         item.clientLineId(),
+                        lineOrder,
                         item.productId(),
                         item.productName(),
                         item.baseUnitPrice(),
+                        item.price().optionUnitAmount().amount(),
                         item.price().unitPrice().amount(),
                         item.quantity(),
                         item.price().lineTotal().amount(),
@@ -72,12 +77,14 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
                         .map(o -> new OrderItemOption(o.getOptionId(), o.getOptionName(), o.getAdditionalPrice()))
                         .toList();
         return OrderItem.restore(
+                entity.getOrderItemId(),
                 entity.getClientLineId(),
                 entity.getProductId(),
                 entity.getProductName(),
                 entity.getBaseUnitPrice(),
                 options,
                 entity.getQuantity(),
+                entity.getOptionUnitAmount(),
                 entity.getUnitPrice(),
                 entity.getLineAmount(),
                 entity.isStockManaged(),

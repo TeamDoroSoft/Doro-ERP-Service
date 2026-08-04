@@ -18,6 +18,7 @@ public final class OrderItem {
     public static final int MAX_QUANTITY = 99;
     public static final int MAX_CLIENT_LINE_ID_LENGTH = 50;
 
+    private final UUID lineId;
     private final String clientLineId;
     private final UUID productId;
     private final String productName;
@@ -29,6 +30,7 @@ public final class OrderItem {
     private final long catalogRevision;
 
     private OrderItem(
+            UUID lineId,
             String clientLineId,
             UUID productId,
             String productName,
@@ -38,6 +40,7 @@ public final class OrderItem {
             OrderPrice price,
             boolean stockManaged,
             long catalogRevision) {
+        this.lineId = Objects.requireNonNull(lineId, "lineId는 필수다");
         if (clientLineId == null || clientLineId.isBlank() || clientLineId.length() > MAX_CLIENT_LINE_ID_LENGTH) {
             throw new InvalidOrderItemsException(
                     "clientLineId는 1~" + MAX_CLIENT_LINE_ID_LENGTH + "자의 식별자여야 합니다");
@@ -77,6 +80,7 @@ public final class OrderItem {
         List<Long> additionalPrices = options.stream().map(OrderItemOption::additionalPrice).toList();
         OrderPrice price = OrderPriceCalculator.calculate(baseUnitPrice, additionalPrices, quantity);
         return new OrderItem(
+                UUID.randomUUID(),
                 clientLineId,
                 productId,
                 productName,
@@ -90,18 +94,23 @@ public final class OrderItem {
 
     /** DB에 저장된 주문 시점 단가와 줄 합계를 현재 계산식으로 다시 계산하지 않고 복원한다. */
     public static OrderItem restore(
+            UUID lineId,
             String clientLineId,
             UUID productId,
             String productName,
             long baseUnitPrice,
             List<OrderItemOption> options,
             int quantity,
+            long optionUnitAmount,
             long unitPrice,
             long lineTotal,
             boolean stockManaged,
             long catalogRevision) {
-        OrderPrice storedPrice = new OrderPrice(OrderAmount.of(unitPrice), OrderAmount.of(lineTotal));
+        OrderPrice storedPrice =
+                new OrderPrice(
+                        OrderAmount.of(optionUnitAmount), OrderAmount.of(unitPrice), OrderAmount.of(lineTotal));
         return new OrderItem(
+                lineId,
                 clientLineId,
                 productId,
                 productName,
@@ -111,6 +120,10 @@ public final class OrderItem {
                 storedPrice,
                 stockManaged,
                 catalogRevision);
+    }
+
+    public UUID lineId() {
+        return lineId;
     }
 
     public String clientLineId() {

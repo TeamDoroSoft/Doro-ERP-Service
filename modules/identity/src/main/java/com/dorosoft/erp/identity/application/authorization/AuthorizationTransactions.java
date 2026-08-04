@@ -32,7 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public final class AuthorizationTransactions {
+public class AuthorizationTransactions {
     private final RoleRepository roles;
     private final EmployeeAccountRepository accounts;
     private final SessionRevoker sessionRevoker;

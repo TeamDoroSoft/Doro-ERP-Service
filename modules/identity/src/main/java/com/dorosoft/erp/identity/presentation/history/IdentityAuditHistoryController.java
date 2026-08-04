@@ -24,7 +24,7 @@ import java.util.UUID;
  */
 @RequestMapping("/api/v1/identity/audit-events")
 @RestController
-public final class IdentityAuditHistoryController {
+public class IdentityAuditHistoryController {
     private final IdentityAuditHistoryQuery historyQuery;
     private final IdentityAuditWebContextFactory accessContextFactory;
 

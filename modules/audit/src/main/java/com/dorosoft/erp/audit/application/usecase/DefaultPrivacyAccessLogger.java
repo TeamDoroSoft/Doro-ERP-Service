@@ -11,6 +11,7 @@ import com.dorosoft.erp.audit.application.port.PrivacyAccessAppendPort;
 import com.dorosoft.erp.audit.domain.ActorType;
 import com.dorosoft.erp.audit.domain.Feature17PrivacyContracts;
 import com.dorosoft.erp.audit.application.model.PrivacyAccessRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -25,13 +26,14 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-public final class DefaultPrivacyAccessLogger implements PrivacyAccessLogger {
+public class DefaultPrivacyAccessLogger implements PrivacyAccessLogger {
     private static final Set<String> SUBJECT_TYPES = Set.of(
             "EMPLOYEE", "WAITING_CUSTOMER", "RESERVATION_CUSTOMER", "PICKUP_CUSTOMER");
 
     private final PrivacyAccessAppendPort appendPort;
     private final Clock clock;
 
+    @Autowired
     public DefaultPrivacyAccessLogger(PrivacyAccessAppendPort appendPort) {
         this(appendPort, Clock.systemUTC());
     }

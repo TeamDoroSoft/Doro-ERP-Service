@@ -54,6 +54,12 @@ public class IdentitySecurityPropertiesValidator {
             validateProductionUri("doro.erp.allowed-origins", allowedOrigin);
         }
 
+        require(StringUtils.hasText(datasourceRuntimeProperties.getUrl()),
+                "spring.datasource.url must be set in production");
+        require(StringUtils.hasText(datasourceRuntimeProperties.getUsername()),
+                "spring.datasource.username must be set in production");
+        require(StringUtils.hasText(datasourceRuntimeProperties.getPassword()),
+                "spring.datasource.password must be set in production");
         require(!isLocalJdbcUrl(datasourceRuntimeProperties.getUrl()),
                 "spring.datasource.url must not use a local host in production");
         require(!isLocalHost(redisRuntimeProperties.getHost()),

@@ -15,7 +15,7 @@ import java.util.UUID;
 
 @Repository
 @Transactional(readOnly = true)
-public final class JdbcIdentitySecurityEventQueryAdapter implements IdentitySecurityEventQueryPort {
+public class JdbcIdentitySecurityEventQueryAdapter implements IdentitySecurityEventQueryPort {
     private final JdbcTemplate jdbc;
 
     public JdbcIdentitySecurityEventQueryAdapter(JdbcTemplate jdbc) {

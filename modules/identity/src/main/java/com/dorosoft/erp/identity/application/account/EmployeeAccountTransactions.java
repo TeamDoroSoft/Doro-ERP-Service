@@ -48,7 +48,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Transactional implementation behind the account API boundary. */
 @Service
-public final class EmployeeAccountTransactions {
+public class EmployeeAccountTransactions {
     private final EmployeeAccountRepository accounts;
     private final CredentialRepository credentials;
     private final RoleRepository roles;

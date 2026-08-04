@@ -18,6 +18,9 @@ class OrderItemOptionEntity {
     @Column(name = "option_id", nullable = false)
     private UUID optionId;
 
+    @Column(name = "option_order", nullable = false)
+    private int optionOrder;
+
     @Column(name = "option_name", nullable = false, length = 100)
     private String optionName;
 
@@ -26,9 +29,11 @@ class OrderItemOptionEntity {
 
     protected OrderItemOptionEntity() {}
 
-    OrderItemOptionEntity(UUID orderItemOptionId, UUID optionId, String optionName, long additionalPrice) {
+    OrderItemOptionEntity(
+            UUID orderItemOptionId, UUID optionId, int optionOrder, String optionName, long additionalPrice) {
         this.orderItemOptionId = orderItemOptionId;
         this.optionId = optionId;
+        this.optionOrder = optionOrder;
         this.optionName = optionName;
         this.additionalPrice = additionalPrice;
     }

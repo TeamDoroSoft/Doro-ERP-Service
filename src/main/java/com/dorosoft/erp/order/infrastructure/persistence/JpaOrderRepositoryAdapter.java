@@ -61,8 +61,16 @@ public class JpaOrderRepositoryAdapter implements OrderRepository {
     }
 
     private static List<OrderItemOptionEntity> toOptionEntities(List<OrderItemOption> options) {
-        return options.stream()
-                .map(o -> new OrderItemOptionEntity(UUID.randomUUID(), o.optionId(), o.optionName(), o.additionalPrice()))
+        return IntStream.range(0, options.size())
+                .mapToObj(index -> {
+                    OrderItemOption option = options.get(index);
+                    return new OrderItemOptionEntity(
+                            UUID.randomUUID(),
+                            option.optionId(),
+                            index,
+                            option.optionName(),
+                            option.additionalPrice());
+                })
                 .toList();
     }
 

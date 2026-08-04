@@ -22,9 +22,13 @@ import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UpdateOperatingScheduleService {
+
+    private static final Logger log = LoggerFactory.getLogger(UpdateOperatingScheduleService.class);
 
     private final StoreSettingsRepository repository;
     private final AuditWriter auditWriter;
@@ -81,6 +85,8 @@ public class UpdateOperatingScheduleService {
                         null,
                         "2"),
                 new AuditContext(actor.actorId(), actor.actorRole(), clock.instant(), requestId));
+        log.info(
+                "store.settings.updated action=STORE_SCHEDULE_UPDATED version={}", saved.version());
         return saved;
     }
 

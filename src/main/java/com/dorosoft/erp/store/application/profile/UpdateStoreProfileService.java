@@ -18,9 +18,13 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UpdateStoreProfileService {
+
+    private static final Logger log = LoggerFactory.getLogger(UpdateStoreProfileService.class);
 
     private final StoreSettingsRepository repository;
     private final AuditWriter auditWriter;
@@ -72,6 +76,10 @@ public class UpdateStoreProfileService {
                         null,
                         "2"),
                 new AuditContext(actor.actorId(), actor.actorRole(), clock.instant(), requestId));
+        log.info(
+                "store.settings.updated action=STORE_PROFILE_UPDATED version={} changedFields={}",
+                saved.version(),
+                changedFields);
         return saved;
     }
 }

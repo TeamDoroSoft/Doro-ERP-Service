@@ -77,21 +77,25 @@ class CalculateOrderIntegrationTest {
         Product withOption =
                 replaceProductOptionsService.replaceOptions(
                         americano.productId(),
-                        List.of(new ProductOptionRequest(null, "샷 추가", 500L, true)),
+                        List.of(
+                                new ProductOptionRequest(null, "샷 추가", 500L, true),
+                                new ProductOptionRequest(null, "시럽 추가", 300L, true)),
                         americano.version(),
                         auditContext);
-        UUID optionId = withOption.options().get(0).optionId();
+        UUID shotOptionId = withOption.options().get(0).optionId();
+        UUID syrupOptionId = withOption.options().get(1).optionId();
         Product latte = createProduct("카페라떼", 5000L);
 
         CalculateOrderCommand command =
                 new CalculateOrderCommand(
                         List.of(
-                                new OrderItemSelection("line-1", americano.productId(), List.of(optionId), 2),
+                                new OrderItemSelection(
+                                        "line-1", americano.productId(), List.of(syrupOptionId, shotOptionId), 2),
                                 new OrderItemSelection("line-2", latte.productId(), List.of(), 1)));
 
         Order saved = calculateOrderService.calculate(command);
 
-        assertThat(saved.totalAmount().amount()).isEqualTo(15000L); // (4500+500)*2 + 5000*1
+        assertThat(saved.totalAmount().amount()).isEqualTo(15600L); // (4500+300+500)*2 + 5000*1
         assertThat(saved.items()).hasSize(2);
         assertThat(saved.items()).extracting(item -> item.clientLineId()).containsExactly("line-1", "line-2");
         List<UUID> savedLineIds = saved.items().stream().map(item -> item.lineId()).toList();
@@ -105,7 +109,7 @@ class CalculateOrderIntegrationTest {
 
         Order reloaded =
                 transactionTemplate.execute(status -> orderRepository.findById(saved.orderId()).orElseThrow());
-        assertThat(reloaded.totalAmount().amount()).isEqualTo(15000L);
+        assertThat(reloaded.totalAmount().amount()).isEqualTo(15600L);
         assertThat(reloaded.items()).hasSize(2);
         assertThat(reloaded.items()).extracting(item -> item.clientLineId()).containsExactly("line-1", "line-2");
         assertThat(reloaded.items()).extracting(item -> item.lineId()).containsExactlyElementsOf(savedLineIds);
@@ -116,12 +120,12 @@ class CalculateOrderIntegrationTest {
         assertThat(americanoLine.clientLineId()).isEqualTo("line-1");
         assertThat(americanoLine.baseUnitPrice()).isEqualTo(4500L);
         assertThat(americanoLine.quantity()).isEqualTo(2);
-        assertThat(americanoLine.price().unitPrice().amount()).isEqualTo(5000L);
-        assertThat(americanoLine.price().optionUnitAmount().amount()).isEqualTo(500L);
-        assertThat(americanoLine.price().lineTotal().amount()).isEqualTo(10000L);
-        assertThat(americanoLine.options()).hasSize(1);
-        assertThat(americanoLine.options().get(0).optionName()).isEqualTo("샷 추가");
-        assertThat(americanoLine.options().get(0).additionalPrice()).isEqualTo(500L);
+        assertThat(americanoLine.price().unitPrice().amount()).isEqualTo(5300L);
+        assertThat(americanoLine.price().optionUnitAmount().amount()).isEqualTo(800L);
+        assertThat(americanoLine.price().lineTotal().amount()).isEqualTo(10600L);
+        assertThat(americanoLine.options())
+                .extracting(option -> option.optionName())
+                .containsExactly("시럽 추가", "샷 추가");
     }
 
     @Test

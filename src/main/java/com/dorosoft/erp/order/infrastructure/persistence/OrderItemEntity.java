@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,6 +56,7 @@ class OrderItemEntity {
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "order_item_id", nullable = false)
+    @OrderBy("optionOrder ASC")
     private List<OrderItemOptionEntity> options = new ArrayList<>();
 
     protected OrderItemEntity() {}

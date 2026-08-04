@@ -32,6 +32,17 @@ class TableManagementSecurityConfiguration {
                                                 "ROLE_ADMIN",
                                                 "ROLE_STAFF",
                                                 "table.session.manage")
+                                        .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/tables/*/sessions/current/orders",
+                                                "/tables/*/sessions/history",
+                                                "/tables/*/sessions/*/orders")
+                                        .hasAnyAuthority(
+                                                "ROLE_OWNER",
+                                                "ROLE_MANAGER",
+                                                "ROLE_ADMIN",
+                                                "ROLE_STAFF",
+                                                "table.order.read")
                                         .requestMatchers("/tables", "/tables/**")
                                         .hasAnyAuthority("ROLE_OWNER", "ROLE_MANAGER", "ROLE_ADMIN", "table.manage")
                                         .anyRequest()

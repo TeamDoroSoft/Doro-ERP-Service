@@ -8,11 +8,21 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.repository.query.Param;
 
 interface TableUsageSessionJpaRepository extends JpaRepository<TableUsageSessionEntity, UUID> {
 
     boolean existsByTableIdAndStatus(UUID tableId, TableUsageSessionStatus status);
+
+    Optional<TableUsageSessionEntity> findByTableIdAndStatus(UUID tableId, TableUsageSessionStatus status);
+
+    Optional<TableUsageSessionEntity> findByTableIdAndSessionId(UUID tableId, UUID sessionId);
+
+    List<TableUsageSessionEntity> findByTableIdAndStatusAndClosedAtIsNotNull(
+            UUID tableId,
+            TableUsageSessionStatus status,
+            Sort sort);
 
     @Query(
             """

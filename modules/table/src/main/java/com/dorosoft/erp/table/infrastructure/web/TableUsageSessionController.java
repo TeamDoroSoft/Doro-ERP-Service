@@ -1,5 +1,6 @@
 package com.dorosoft.erp.table.infrastructure.web;
 
+import com.dorosoft.erp.table.application.TableOrderQueryService;
 import com.dorosoft.erp.table.application.TableUsageSessionService;
 import com.dorosoft.erp.table.application.TableUsageSessionService.StartSessionContext;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,10 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -25,14 +28,17 @@ class TableUsageSessionController {
     private static final String REQUEST_ID_ATTRIBUTE = "doro.erp.requestId";
 
     private final TableUsageSessionService service;
+    private final TableOrderQueryService orderQueryService;
     private final TableIdempotencyService idempotencyService;
     private final String tenantId;
 
     TableUsageSessionController(
             TableUsageSessionService service,
+            TableOrderQueryService orderQueryService,
             TableIdempotencyService idempotencyService,
             @Value("${doro.erp.tenant-id:local-store}") String tenantId) {
         this.service = service;
+        this.orderQueryService = orderQueryService;
         this.idempotencyService = idempotencyService;
         this.tenantId = tenantId;
     }
@@ -64,6 +70,61 @@ class TableUsageSessionController {
                 servletRequest,
                 Map.of(),
                 () -> ResponseEntity.ok(service.close(tableId, sessionId, context(authentication, servletRequest))));
+    }
+
+    @GetMapping("/current/orders")
+    ResponseEntity<Object> currentOrders(
+            @PathVariable("tableId") UUID tableId,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "cursor", required = false) String cursor,
+            @RequestParam(name = "size", required = false) Integer size,
+            HttpServletRequest servletRequest,
+            Authentication authentication) {
+        return ResponseEntity.ok(
+                orderQueryService.currentOrders(
+                        tableId,
+                        status,
+                        cursor,
+                        size,
+                        context(authentication, servletRequest)));
+    }
+
+    @GetMapping("/history")
+    ResponseEntity<Object> pastSessions(
+            @PathVariable("tableId") UUID tableId,
+            @RequestParam(name = "from", required = false) String from,
+            @RequestParam(name = "to", required = false) String to,
+            @RequestParam(name = "cursor", required = false) String cursor,
+            @RequestParam(name = "size", required = false) Integer size,
+            HttpServletRequest servletRequest,
+            Authentication authentication) {
+        return ResponseEntity.ok(
+                orderQueryService.pastSessions(
+                        tableId,
+                        from,
+                        to,
+                        cursor,
+                        size,
+                        context(authentication, servletRequest)));
+    }
+
+    @GetMapping("/{sessionId}/orders")
+    ResponseEntity<Object> pastSessionOrders(
+            @PathVariable("tableId") UUID tableId,
+            @PathVariable("sessionId") UUID sessionId,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "cursor", required = false) String cursor,
+            @RequestParam(name = "size", required = false) Integer size,
+            HttpServletRequest servletRequest,
+            Authentication authentication) {
+        return ResponseEntity.ok(
+                orderQueryService.pastSessionOrders(
+                        tableId,
+                        sessionId,
+                        status,
+                        cursor,
+                        size,
+                        context(authentication, servletRequest)));
     }
 
     private StartSessionContext context(Authentication authentication, HttpServletRequest request) {

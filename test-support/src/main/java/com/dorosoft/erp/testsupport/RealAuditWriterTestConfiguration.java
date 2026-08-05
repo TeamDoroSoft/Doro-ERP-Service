@@ -1,13 +1,19 @@
 package com.dorosoft.erp.testsupport;
 
+import com.dorosoft.erp.audit.application.api.AuditQuery;
 import com.dorosoft.erp.audit.application.api.AuditWriter;
 import com.dorosoft.erp.audit.application.port.AuditAppendPort;
+import com.dorosoft.erp.audit.application.port.AuditCursorCodec;
 import com.dorosoft.erp.audit.application.port.AuditPayloadSigner;
+import com.dorosoft.erp.audit.application.port.AuditReadPort;
+import com.dorosoft.erp.audit.application.usecase.DefaultAuditQuery;
 import com.dorosoft.erp.audit.application.usecase.DefaultAuditWriter;
+import com.dorosoft.erp.audit.infrastructure.HmacAuditCursorCodec;
 import com.dorosoft.erp.audit.infrastructure.HmacSha256AuditPayloadSigner;
 import com.dorosoft.erp.audit.infrastructure.JdbcAuditRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,7 +36,7 @@ public class RealAuditWriterTestConfiguration {
     }
 
     @Bean
-    AuditAppendPort auditAppendPort(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    JdbcAuditRepository auditRepository(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
         return new JdbcAuditRepository(jdbcTemplate, objectMapper);
     }
 
@@ -43,5 +49,15 @@ public class RealAuditWriterTestConfiguration {
     AuditWriter auditWriter(
             AuditAppendPort appendPort, AuditPayloadSigner payloadSigner, ObjectMapper objectMapper, Clock clock) {
         return new DefaultAuditWriter(appendPort, payloadSigner, objectMapper, clock);
+    }
+
+    @Bean
+    AuditCursorCodec auditCursorCodec(ObjectMapper objectMapper, Clock clock) {
+        return new HmacAuditCursorCodec(TEST_HMAC_KEY, clock, Duration.ofMinutes(15), objectMapper);
+    }
+
+    @Bean
+    AuditQuery auditQuery(AuditReadPort readPort, AuditCursorCodec cursorCodec, Clock clock) {
+        return new DefaultAuditQuery(readPort, cursorCodec, clock);
     }
 }

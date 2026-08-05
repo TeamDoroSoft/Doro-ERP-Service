@@ -228,6 +228,37 @@ class CatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.categories[0].products[0].orderable").value(true));
     }
 
+    // --- 이력 조회(GET /catalog/history, MENU-08) --------------------------------
+
+    @Test
+    @DisplayName("GET /catalog/history는 audit.read 권한으로 Category 생성 이력을 반환한다")
+    void getHistoryReturnsRecordedCategoryCreation() throws Exception {
+        mockMvc.perform(
+                post("/api/v1/catalog/categories")
+                        .with(authentication(managerAuthentication()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"커피\"}"));
+
+        mockMvc.perform(
+                        get("/api/v1/catalog/history")
+                                .queryParam("targetType", "CATEGORY")
+                                .queryParam("action", "CATEGORY_CREATED")
+                                .with(authentication(auditReaderAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].action").value("CATEGORY_CREATED"))
+                .andExpect(jsonPath("$.data.items[0].targetType").value("CATEGORY"))
+                .andExpect(jsonPath("$.requestId").exists());
+    }
+
+    @Test
+    @DisplayName("catalog.read 권한만으로는 GET /catalog/history가 403 FORBIDDEN이다")
+    void getHistoryWithoutAuditReadPermissionIsForbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/catalog/history").with(authentication(readOnlyAuthentication())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
     private static Authentication managerAuthentication() {
         return authenticationOf(Set.of("catalog.manage"));
     }
@@ -238,6 +269,10 @@ class CatalogControllerIntegrationTest {
 
     private static Authentication soldOutOnlyAuthentication() {
         return authenticationOf(Set.of("catalog.soldout.update"));
+    }
+
+    private static Authentication auditReaderAuthentication() {
+        return authenticationOf(Set.of("audit.read"));
     }
 
     private static Authentication authenticationOf(Set<String> permissions) {

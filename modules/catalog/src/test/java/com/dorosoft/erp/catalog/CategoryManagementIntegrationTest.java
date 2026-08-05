@@ -67,6 +67,17 @@ class CategoryManagementIntegrationTest {
         assertThat(categoryRepository.findAll()).hasSize(3);
     }
 
+    @Test
+    @DisplayName("displayOrder에 공백이 있어도 Category는 현재 최댓값 다음 순서로 생성된다")
+    void createsAfterMaximumDisplayOrderWhenGapExists() {
+        CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "디저트", 2);
+
+        Category created = createCategoryService.create("차", null, auditContext);
+
+        assertThat(created.displayOrder()).isEqualTo(3);
+    }
+
     // --- 생성 멱등성 ---------------------------------------------------------
 
     @Test

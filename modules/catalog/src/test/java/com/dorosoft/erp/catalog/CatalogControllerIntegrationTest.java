@@ -6,11 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dorosoft.erp.identity.infrastructure.security.IdentityPrincipal;
+import com.jayway.jsonpath.JsonPath;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -28,6 +30,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 /**
  * Catalog HTTP API 통합 테스트. 실제 MySQL·실제 Service Chain을 그대로 태우고, Spring Security
@@ -228,17 +231,262 @@ class CatalogControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.categories[0].products[0].orderable").value(true));
     }
 
+    // --- 권한 우회(RBAC bypass, MENU-10) --------------------------------------------
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Category 수정은 403 FORBIDDEN이다")
+    void updateCategoryWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+
+        mockMvc.perform(
+                        put("/api/v1/catalog/categories/" + categoryId)
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"category-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"name\":\"새 이름\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Category 순서 변경은 403 FORBIDDEN이다")
+    void replaceCategoryOrderWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(
+                        put("/api/v1/catalog/categories/order")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"catalog-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"categoryIds\":[\"" + UUID.randomUUID() + "\"]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Product 생성은 403 FORBIDDEN이다")
+    void createProductWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+
+        mockMvc.perform(
+                        post("/api/v1/catalog/products")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"categoryId\":\""
+                                                + categoryId
+                                                + "\",\"name\":\"아메리카노\",\"basePrice\":4500,\"salesEnabled\":true,\"stockManaged\":false}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Product 수정은 403 FORBIDDEN이다")
+    void updateProductWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        UUID productId = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, categoryId, "아메리카노", 4500L, 0);
+
+        mockMvc.perform(
+                        put("/api/v1/catalog/products/" + productId)
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"product-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"categoryId\":\""
+                                                + categoryId
+                                                + "\",\"name\":\"아메리카노\",\"basePrice\":4500,\"salesEnabled\":true,\"stockManaged\":false}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Product 순서 변경은 403 FORBIDDEN이다")
+    void replaceProductOrderWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+
+        mockMvc.perform(
+                        put("/api/v1/catalog/categories/" + categoryId + "/product-order")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"catalog-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"productIds\":[\"" + UUID.randomUUID() + "\"]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Product 옵션 교체는 403 FORBIDDEN이다")
+    void replaceProductOptionsWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        UUID productId = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, categoryId, "아메리카노", 4500L, 0);
+
+        mockMvc.perform(
+                        put("/api/v1/catalog/products/" + productId + "/options")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"product-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"options\":[{\"name\":\"샷 추가\",\"additionalPrice\":500,\"enabled\":true}]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 판매 정책 변경은 403 FORBIDDEN이다")
+    void changeSalesPolicyWithoutPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        UUID productId = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, categoryId, "아메리카노", 4500L, 0);
+
+        mockMvc.perform(
+                        patch("/api/v1/catalog/products/" + productId + "/sales-policy")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"product-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"salesEnabled\":false,\"stockManaged\":false}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage·catalog.soldout.update 권한이 모두 없으면 품절 변경은 403 FORBIDDEN이다")
+    void changeSoldOutWithoutEitherPermissionIsForbidden() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+        UUID productId = CatalogIntegrationSupport.insertProduct(jdbcClient, catalogId, categoryId, "아메리카노", 4500L, 0);
+
+        mockMvc.perform(
+                        patch("/api/v1/catalog/products/" + productId + "/sold-out")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .header("If-Match", "\"product-0\"")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"soldOut\":true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Media 업로드 요청은 403 FORBIDDEN이다")
+    void requestMediaUploadWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/catalog/media-uploads")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"contentType\":\"image/webp\",\"byteSize\":1024,\"checksumSha256\":\""
+                                                + "a".repeat(64)
+                                                + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.manage 권한이 없으면 Media 업로드 완료는 403 FORBIDDEN이다")
+    void completeMediaUploadWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/catalog/media-uploads/" + UUID.randomUUID() + "/complete")
+                                .with(authentication(readOnlyAuthentication()))
+                                .with(csrf()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.read 권한이 없으면 GET /catalog는 403 FORBIDDEN이다")
+    void getOverviewWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/catalog").with(authentication(noPermissionAuthentication())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.read 권한이 없으면 GET /catalog/products는 403 FORBIDDEN이다")
+    void listProductsWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/catalog/products").with(authentication(noPermissionAuthentication())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    @DisplayName("catalog.read 권한이 없으면 GET /catalog/products/{id}는 403 FORBIDDEN이다")
+    void getProductWithoutPermissionIsForbidden() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/catalog/products/" + UUID.randomUUID())
+                                .with(authentication(noPermissionAuthentication())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    // --- 공개 메뉴 ETag·304(MENU-10) -------------------------------------------------
+
+    @Test
+    @DisplayName("GET /menu는 catalogRevision 기반 ETag를 반환한다")
+    void publicMenuReturnsRevisionETag() throws Exception {
+        mockMvc.perform(get("/api/v1/menu").with(authentication(readOnlyAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"catalog-0\""));
+    }
+
+    @Test
+    @DisplayName("GET /menu에 현재 ETag를 If-None-Match로 보내면 304를 반환하고 본문이 없다")
+    void publicMenuReturnsNotModifiedWhenIfNoneMatchMatches() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/menu")
+                                .header("If-None-Match", "\"catalog-0\"")
+                                .with(authentication(readOnlyAuthentication())))
+                .andExpect(status().isNotModified())
+                .andExpect(header().string("ETag", "\"catalog-0\""))
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    @DisplayName("GET /menu에 오래된 ETag를 If-None-Match로 보내면 200과 최신 본문을 반환한다")
+    void publicMenuReturnsFreshBodyWhenIfNoneMatchIsStale() throws Exception {
+        UUID categoryId = CatalogIntegrationSupport.insertCategory(jdbcClient, catalogId, "커피", 0);
+
+        mockMvc.perform(
+                put("/api/v1/catalog/categories/order")
+                        .with(authentication(managerAuthentication()))
+                        .with(csrf())
+                        .header("If-Match", "\"catalog-0\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"categoryIds\":[\"" + categoryId + "\"]}"));
+
+        mockMvc.perform(
+                        get("/api/v1/menu")
+                                .header("If-None-Match", "\"catalog-0\"")
+                                .with(authentication(readOnlyAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(header().string("ETag", "\"catalog-1\""))
+                .andExpect(jsonPath("$.data.catalogRevision").value(1));
+    }
+
     // --- 이력 조회(GET /catalog/history, MENU-08) --------------------------------
 
     @Test
-    @DisplayName("GET /catalog/history는 audit.read 권한으로 Category 생성 이력을 반환한다")
-    void getHistoryReturnsRecordedCategoryCreation() throws Exception {
-        mockMvc.perform(
-                post("/api/v1/catalog/categories")
-                        .with(authentication(managerAuthentication()))
-                        .with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"커피\"}"));
+    @DisplayName("GET /catalog/history는 audit.read 권한으로 Category 생성 이력을 반환하며 actor·requestId를 그대로 보존한다")
+    void getHistoryReturnsRecordedCategoryCreationWithActorAndRequestId() throws Exception {
+        UUID accountId = UUID.randomUUID();
+        Authentication creator = authenticationOf(accountId, Set.of("catalog.manage"));
+        // RealAuditWriterAdapter는 Catalog의 actor 표시 문자열(accountId.toString())에서 결정적으로
+        // 파생한 UUID를 감사 actorId로 쓴다(같은 문자열은 항상 같은 UUID) - 원본 accountId를 그대로
+        // 저장하지 않는다.
+        UUID expectedAuditActorId =
+                UUID.nameUUIDFromBytes(accountId.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        MvcResult createResult =
+                mockMvc.perform(
+                                post("/api/v1/catalog/categories")
+                                        .with(authentication(creator))
+                                        .with(csrf())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content("{\"name\":\"커피\"}"))
+                        .andReturn();
+        String createRequestId = JsonPath.read(createResult.getResponse().getContentAsString(), "$.requestId");
 
         mockMvc.perform(
                         get("/api/v1/catalog/history")
@@ -248,6 +496,8 @@ class CatalogControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].action").value("CATEGORY_CREATED"))
                 .andExpect(jsonPath("$.data.items[0].targetType").value("CATEGORY"))
+                .andExpect(jsonPath("$.data.items[0].actorId").value(expectedAuditActorId.toString()))
+                .andExpect(jsonPath("$.data.items[0].requestId").value(createRequestId))
                 .andExpect(jsonPath("$.requestId").exists());
     }
 
@@ -275,8 +525,16 @@ class CatalogControllerIntegrationTest {
         return authenticationOf(Set.of("audit.read"));
     }
 
+    private static Authentication noPermissionAuthentication() {
+        return authenticationOf(Set.of());
+    }
+
     private static Authentication authenticationOf(Set<String> permissions) {
-        IdentityPrincipal principal = new IdentityPrincipal(UUID.randomUUID(), "test-tenant", "ADMIN", permissions, false);
+        return authenticationOf(UUID.randomUUID(), permissions);
+    }
+
+    private static Authentication authenticationOf(UUID accountId, Set<String> permissions) {
+        IdentityPrincipal principal = new IdentityPrincipal(accountId, "test-tenant", "ADMIN", permissions, false);
         List<GrantedAuthority> authorities = permissions.stream().map(SimpleGrantedAuthority::new).map(a -> (GrantedAuthority) a).toList();
         return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }

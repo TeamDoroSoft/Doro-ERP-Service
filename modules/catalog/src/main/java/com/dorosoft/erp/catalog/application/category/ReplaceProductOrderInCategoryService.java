@@ -18,38 +18,65 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Category 안의 Product 순서 원자적 교체(FR-MENU-008). 판매 비활성 상품도 모두 포함해야 하며
  * 다른 Category 상품·중복·누락은 전체 요청을 거부한다. Product Aggregate 자체는 MENU-04 소유이므로
  * 이 Use Case는 ProductOrderRepository의 좁은 계약만 사용한다.
+ *
+ * <p>동시 정렬 방어: {@link ReplaceCategoryOrderService}와 같은 이유로, 서로 다른 순서로 여러 Product 행을
+ * 갱신하는 두 요청이 겹치면 InnoDB가 순환 대기를 감지해 Transaction을 강제 종료할 수 있다
+ * ({@link CannotAcquireLockException}). 실제 데이터 충돌이 아닌 일시적 잠금 스케줄링 문제이므로 같은
+ * 요청으로 짧게 재시도한다.
  */
 @Service
 public class ReplaceProductOrderInCategoryService {
 
     private static final String VALUE_SCHEMA_VERSION = "v1";
+    private static final int MAX_DEADLOCK_RETRY_ATTEMPTS = 3;
 
     private final CategoryRepository categoryRepository;
     private final ProductOrderRepository productOrderRepository;
     private final CatalogRevisionRepository catalogRevisionRepository;
     private final AuditWriter auditWriter;
+    private final TransactionTemplate requiresNewTransaction;
 
     public ReplaceProductOrderInCategoryService(
             CategoryRepository categoryRepository,
             ProductOrderRepository productOrderRepository,
             CatalogRevisionRepository catalogRevisionRepository,
-            AuditWriter auditWriter) {
+            AuditWriter auditWriter,
+            PlatformTransactionManager transactionManager) {
         this.categoryRepository = categoryRepository;
         this.productOrderRepository = productOrderRepository;
         this.catalogRevisionRepository = catalogRevisionRepository;
         this.auditWriter = auditWriter;
+        this.requiresNewTransaction = new TransactionTemplate(transactionManager);
+        this.requiresNewTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional
     public CatalogRevision replaceOrder(
+            UUID categoryId, List<UUID> orderedProductIds, long expectedCatalogRevision, AuditContext auditContext) {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return requiresNewTransaction.execute(
+                        status -> replaceOrderAndRecord(categoryId, orderedProductIds, expectedCatalogRevision, auditContext));
+            } catch (CannotAcquireLockException ex) {
+                if (attempt >= MAX_DEADLOCK_RETRY_ATTEMPTS) {
+                    throw new OptimisticLockingFailureException(
+                            "반복된 Deadlock으로 Product 순서 변경에 실패했습니다.", ex);
+                }
+            }
+        }
+    }
+
+    private CatalogRevision replaceOrderAndRecord(
             UUID categoryId, List<UUID> orderedProductIds, long expectedCatalogRevision, AuditContext auditContext) {
         if (categoryRepository.findById(categoryId).isEmpty()) {
             throw new CategoryNotFoundException(categoryId);

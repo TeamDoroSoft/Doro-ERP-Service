@@ -3,6 +3,8 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":modules:audit"))
+
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("tools.jackson.core:jackson-databind")

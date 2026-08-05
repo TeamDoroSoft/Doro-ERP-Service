@@ -36,7 +36,8 @@ import tools.jackson.databind.ObjectMapper;
 @SpringBootTest(
         properties = {
             "doro.store.bootstrap.enabled=false",
-            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+            "table.security.idempotency.encryption-key-base64=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
         })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

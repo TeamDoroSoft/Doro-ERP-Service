@@ -18,6 +18,7 @@ class ApplicationPropertiesValidationTest {
     private static final String PRIVACY_ADDRESS_KEY = key((byte) 5);
     private static final String RATE_LIMIT_PREVIOUS_KEY = key((byte) 6);
     private static final String IDEMPOTENCY_PREVIOUS_KEY = key((byte) 7);
+    private static final String TABLE_IDEMPOTENCY_KEY = key((byte) 8);
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(ValidationTestConfiguration.class)
@@ -138,6 +139,32 @@ class ApplicationPropertiesValidationTest {
                         "audit cursor and identity rate limit keys must not be equal"));
     }
 
+    @Test
+    void shouldFailWhenTableIdempotencyKeyIsMissingInProduction() {
+        contextRunner
+                .withPropertyValues("table.security.idempotency.encryption-key-base64=")
+                .run(context -> assertFailureContains(context.getStartupFailure(),
+                        "table.security.idempotency.encryption-key-base64 must be set in production"));
+    }
+
+    @Test
+    void shouldFailWhenTableIdempotencyKeyIsNotValidBase64() {
+        contextRunner
+                .withPropertyValues("table.security.idempotency.encryption-key-base64=not-base64!!")
+                .run(context -> assertFailureContains(context.getStartupFailure(),
+                        "table.security.idempotency.encryption-key-base64 must be valid Base64"));
+    }
+
+    @Test
+    void shouldFailWhenTableIdempotencyKeyIsShorterThanThirtyTwoBytes() {
+        String shortKey = Base64.getEncoder().encodeToString(new byte[31]);
+
+        contextRunner
+                .withPropertyValues("table.security.idempotency.encryption-key-base64=" + shortKey)
+                .run(context -> assertFailureContains(context.getStartupFailure(),
+                        "table.security.idempotency.encryption-key-base64 must decode to at least 32 bytes"));
+    }
+
     private static String[] validProductionProperties() {
         return new String[] {
                 "spring.profiles.active=prod",
@@ -160,7 +187,8 @@ class ApplicationPropertiesValidationTest {
                 "audit.security.payload-hmac.key-base64=" + AUDIT_PAYLOAD_KEY,
                 "audit.security.cursor-hmac.key-base64=" + AUDIT_CURSOR_KEY,
                 "audit.security.privacy-client-address.key-version=v1",
-                "audit.security.privacy-client-address.key-base64=" + PRIVACY_ADDRESS_KEY
+                "audit.security.privacy-client-address.key-base64=" + PRIVACY_ADDRESS_KEY,
+                "table.security.idempotency.encryption-key-base64=" + TABLE_IDEMPOTENCY_KEY
         };
     }
 
@@ -185,11 +213,16 @@ class ApplicationPropertiesValidationTest {
             DoroErpProperties.class,
             IdentitySecurityProperties.class,
             AuditSecurityProperties.class,
+            TableSecurityProperties.class,
             DatasourceRuntimeProperties.class,
             RedisRuntimeProperties.class,
             RedisSessionProperties.class
     })
-    @Import({IdentitySecurityPropertiesValidator.class, AuditSecurityPropertiesValidator.class})
+    @Import({
+        IdentitySecurityPropertiesValidator.class,
+        AuditSecurityPropertiesValidator.class,
+        TableSecurityPropertiesValidator.class
+    })
     static class ValidationTestConfiguration {
     }
 }

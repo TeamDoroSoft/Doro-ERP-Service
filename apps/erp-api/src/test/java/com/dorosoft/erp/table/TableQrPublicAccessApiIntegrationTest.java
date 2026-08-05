@@ -43,7 +43,8 @@ import tools.jackson.databind.ObjectMapper;
             "doro.erp.public-base-url=https://qr.example.test",
             "doro.table.qr-access.rate-limit.capacity=2",
             "doro.table.qr-access.rate-limit.window=PT1M",
-            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+            "table.security.idempotency.encryption-key-base64=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
         })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

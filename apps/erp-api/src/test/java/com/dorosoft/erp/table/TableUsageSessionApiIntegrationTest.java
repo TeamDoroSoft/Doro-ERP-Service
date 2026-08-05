@@ -40,7 +40,8 @@ import tools.jackson.databind.ObjectMapper;
         properties = {
             "doro.store.bootstrap.enabled=false",
             "doro.erp.tenant-id=session-store",
-            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+            "audit.security.payload-hmac.key-base64=AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=",
+            "table.security.idempotency.encryption-key-base64=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc="
         })
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)

@@ -67,6 +67,11 @@ audit:
       key-version: ${PRIVACY_CLIENT_ADDRESS_KEY_VERSION:}
       key-base64: ${PRIVACY_CLIENT_ADDRESS_KEY_BASE64:}
 
+table:
+  security:
+    idempotency:
+      encryption-key-base64: ${TABLE_IDEMPOTENCY_ENCRYPTION_KEY_BASE64:}
+
 logging:
   level:
     root: ${LOGGING_LEVEL_ROOT:INFO}

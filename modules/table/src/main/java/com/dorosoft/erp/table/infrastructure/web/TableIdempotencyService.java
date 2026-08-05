@@ -2,6 +2,9 @@ package com.dorosoft.erp.table.infrastructure.web;
 
 import com.dorosoft.erp.table.application.TableErrorCode;
 import com.dorosoft.erp.table.application.TableManagementException;
+import com.dorosoft.erp.table.application.idempotency.TableIdempotencyCryptoIntegrityException;
+import com.dorosoft.erp.table.application.idempotency.TableIdempotencyCryptoUnavailableException;
+import com.dorosoft.erp.table.application.port.TableIdempotencyResponseCrypto;
 import com.dorosoft.erp.table.infrastructure.persistence.TableIdempotencyRecordEntity;
 import com.dorosoft.erp.table.infrastructure.persistence.TableIdempotencyRecordJpaRepository;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,11 +28,15 @@ class TableIdempotencyService {
 
     private final TableIdempotencyRecordJpaRepository repository;
     private final ObjectMapper objectMapper;
+    private final TableIdempotencyResponseCrypto crypto;
 
     TableIdempotencyService(
-            TableIdempotencyRecordJpaRepository repository, ObjectMapper objectMapper) {
+            TableIdempotencyRecordJpaRepository repository,
+            ObjectMapper objectMapper,
+            TableIdempotencyResponseCrypto crypto) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.crypto = crypto;
     }
 
     @Transactional
@@ -114,18 +121,46 @@ class TableIdempotencyService {
     }
 
     private String writeBody(Object body) {
+        String json;
         try {
-            return objectMapper.writeValueAsString(body);
+            json = objectMapper.writeValueAsString(body);
         } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize idempotent response.", e);
         }
+        try {
+            // TABLE-00/TABLE-10: response_body is never persisted as plaintext JSON; it is
+            // always stored as an AES-256-GCM envelope so a database read cannot recover the
+            // replayed response (which may echo back non-secret metadata) without the
+            // configured encryption key.
+            return crypto.encrypt(json);
+        } catch (TableIdempotencyCryptoUnavailableException e) {
+            throw storeUnavailable();
+        }
     }
 
-    private JsonNode readBody(String body) {
+    private JsonNode readBody(String stored) {
+        String json;
         try {
-            return objectMapper.readTree(body);
+            json = crypto.decrypt(stored);
+        } catch (TableIdempotencyCryptoUnavailableException e) {
+            throw storeUnavailable();
+        } catch (TableIdempotencyCryptoIntegrityException e) {
+            throw new TableManagementException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    TableErrorCode.IDEMPOTENCY_REPLAY_UNAVAILABLE,
+                    "Stored idempotent response could not be verified.");
+        }
+        try {
+            return objectMapper.readTree(json);
         } catch (JacksonException e) {
             throw new IllegalStateException("Failed to deserialize idempotent response.", e);
         }
+    }
+
+    private TableManagementException storeUnavailable() {
+        return new TableManagementException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                TableErrorCode.IDEMPOTENCY_STORE_UNAVAILABLE,
+                "Idempotent response store is unavailable.");
     }
 }

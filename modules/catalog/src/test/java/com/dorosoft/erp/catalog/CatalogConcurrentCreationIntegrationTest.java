@@ -141,7 +141,12 @@ class CatalogConcurrentCreationIntegrationTest {
                                 () -> createProductService.create(basicCommand(targetCategoryId, "녹차", null), auditContext)));
 
         assertExactlyOneWinnerOneConflict(results, Product.class);
-        assertThat(CatalogIntegrationSupport.countOf(jdbcClient, "product")).isEqualTo(2);
+        // 이동이 이기면 기존 Product 1개가 자리만 옮기고(count=1), 생성이 이기면 새 Product가 하나
+        // 더 늘어난다(count=2). 어느 쪽이 이기든 "정확히 하나만 성공"이면 되므로 승자에 따라 기대값을
+        // 맞춘다.
+        boolean moveWon = results.get(0) instanceof Product;
+        long expectedProductCount = moveWon ? 1 : 2;
+        assertThat(CatalogIntegrationSupport.countOf(jdbcClient, "product")).isEqualTo(expectedProductCount);
     }
 
     // --- 6·7. 생성 멱등성 동시 요청 -------------------------------------------------

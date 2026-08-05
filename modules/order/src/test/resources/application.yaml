@@ -5,6 +5,8 @@ spring:
     open-in-view: false
 
 doro:
+  erp:
+    tenant-id: test-tenant
   catalog:
     media:
       tenant-id: test-tenant

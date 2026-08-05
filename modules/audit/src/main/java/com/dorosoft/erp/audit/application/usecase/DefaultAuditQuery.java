@@ -21,7 +21,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** Query implementation configured explicitly with the Feature 17 signed-cursor key ring. */
-public final class DefaultAuditQuery implements AuditQuery {
+public class DefaultAuditQuery implements AuditQuery {
     private static final Duration DEFAULT_PERIOD = Duration.ofDays(30);
     private static final Duration MAX_PERIOD = Duration.ofDays(366);
 

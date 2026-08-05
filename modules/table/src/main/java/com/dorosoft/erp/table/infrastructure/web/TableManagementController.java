@@ -73,13 +73,16 @@ class TableManagementController {
     }
 
     @GetMapping
-    List<TableResponse> getTables() {
-        return service.getTables();
+    List<TableResponse> getTables(HttpServletRequest servletRequest, Authentication authentication) {
+        return service.getTables(context(authentication, servletRequest));
     }
 
     @GetMapping("/{tableId}")
-    TableResponse getTable(@PathVariable("tableId") UUID tableId) {
-        return service.getTable(tableId);
+    TableResponse getTable(
+            @PathVariable("tableId") UUID tableId,
+            HttpServletRequest servletRequest,
+            Authentication authentication) {
+        return service.getTable(tableId, context(authentication, servletRequest));
     }
 
     @PutMapping("/{tableId}")

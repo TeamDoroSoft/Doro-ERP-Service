@@ -34,6 +34,7 @@ public class TableQrCredentialService {
     private final AuditWriter auditWriter;
     private final TableOperationObservability observability;
     private final Clock clock;
+    private final String tenantId;
     private final String publicBaseUrl;
 
     public TableQrCredentialService(
@@ -43,6 +44,7 @@ public class TableQrCredentialService {
             AuditWriter auditWriter,
             TableOperationObservability observability,
             Clock clock,
+            @Value("${doro.erp.tenant-id:local-store}") String tenantId,
             @Value("${doro.erp.public-base-url:http://localhost:8080}") String publicBaseUrl) {
         this.tableRepository = tableRepository;
         this.credentialRepository = credentialRepository;
@@ -50,12 +52,14 @@ public class TableQrCredentialService {
         this.auditWriter = auditWriter;
         this.observability = observability;
         this.clock = clock;
+        this.tenantId = tenantId;
         this.publicBaseUrl = normalizeBaseUrl(publicBaseUrl);
     }
 
     @Transactional
     public QrCredentialIssueResponse issue(UUID tableId, TableQrOperationContext context) {
         try {
+            verifyTenant(context);
             StoreTableEntity table = lockExistingTable(tableId);
             if (credentialRepository.findActiveByTableIdForUpdate(table.getTableId()).isPresent()) {
                 throw new TableManagementException(
@@ -90,6 +94,7 @@ public class TableQrCredentialService {
     @Transactional
     public QrCredentialIssueResponse reissue(UUID tableId, TableQrOperationContext context) {
         try {
+            verifyTenant(context);
             StoreTableEntity table = lockExistingTable(tableId);
             Instant occurredAt = clock.instant();
             UUID predecessorCredentialId =
@@ -131,12 +136,13 @@ public class TableQrCredentialService {
     private StoreTableEntity lockExistingTable(UUID tableId) {
         return tableRepository
                 .findByIdForUpdate(tableId)
-                .orElseThrow(
-                        () ->
-                                new TableManagementException(
-                                        HttpStatus.NOT_FOUND,
-                                        TableErrorCode.TABLE_NOT_FOUND,
-                                        "Table not found. tableId=" + tableId));
+                .orElseThrow(TableQrCredentialService::tableNotFound);
+    }
+
+    private void verifyTenant(TableQrOperationContext context) {
+        if (!tenantId.equals(context.tenantId())) {
+            throw tableNotFound();
+        }
     }
 
     private QrCredentialIssueResponse issueNewCredential(
@@ -226,6 +232,13 @@ public class TableQrCredentialService {
             normalized = normalized.substring(0, normalized.length() - 1);
         }
         return normalized;
+    }
+
+    private static TableManagementException tableNotFound() {
+        return new TableManagementException(
+                HttpStatus.NOT_FOUND,
+                TableErrorCode.TABLE_NOT_FOUND,
+                "Table not found.");
     }
 
     public record TableQrOperationContext(

@@ -4,6 +4,7 @@ import com.dorosoft.erp.table.application.TableQrCredentialService;
 import com.dorosoft.erp.table.application.TableQrCredentialService.TableQrOperationContext;
 import com.dorosoft.erp.table.application.dto.QrCredentialIssueResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
@@ -69,6 +70,13 @@ class TableQrCredentialController {
     }
 
     private TableQrOperationContext context(Authentication authentication, HttpServletRequest request) {
+        if (authentication != null) {
+            TableQrOperationContext principalContext = identityPrincipalContext(authentication.getPrincipal(), request);
+            if (principalContext != null) {
+                return principalContext;
+            }
+        }
+
         String actorName = authentication == null ? "anonymous" : authentication.getName();
         return new TableQrOperationContext(
                 actorId(actorName),
@@ -76,6 +84,30 @@ class TableQrCredentialController {
                 actorName,
                 tenantId,
                 requestId(request));
+    }
+
+    private TableQrOperationContext identityPrincipalContext(Object principal, HttpServletRequest request) {
+        if (principal == null
+                || !"com.dorosoft.erp.identity.infrastructure.security.IdentityPrincipal"
+                        .equals(principal.getClass().getName())) {
+            return null;
+        }
+        try {
+            UUID accountId = (UUID) invoke(principal, "accountId");
+            return new TableQrOperationContext(
+                    accountId,
+                    (String) invoke(principal, "roleCode"),
+                    accountId.toString(),
+                    (String) invoke(principal, "tenantKey"),
+                    requestId(request));
+        } catch (ReflectiveOperationException | ClassCastException exception) {
+            return null;
+        }
+    }
+
+    private static Object invoke(Object target, String methodName) throws ReflectiveOperationException {
+        Method method = target.getClass().getMethod(methodName);
+        return method.invoke(target);
     }
 
     private static UUID actorId(String actorName) {

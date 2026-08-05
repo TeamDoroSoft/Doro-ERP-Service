@@ -1,16 +1,19 @@
 package com.dorosoft.erp.table;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.dorosoft.erp.identity.infrastructure.security.IdentityPrincipal;
 import com.dorosoft.erp.testsupport.TestcontainersConfiguration;
 import java.net.URI;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -29,8 +32,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -144,6 +150,43 @@ class TableQrCredentialApiIntegrationTest {
                 .andExpect(status().isForbidden());
 
         assertThat(TableIntegrationSupport.countOf(jdbcClient, "table_qr_credential")).isZero();
+    }
+
+    @Test
+    @DisplayName("다른 업체 Principal은 QR 발급과 재발급을 할 수 없다")
+    void 다른_업체_qr_발급_재발급_차단() throws Exception {
+        UUID tableId = createTable("Q5A", "QR 다른 업체", 4);
+
+        MvcResult issue =
+                mockMvc
+                        .perform(
+                                post("/tables/{tableId}/qr-credentials", tableId)
+                                        .with(identityManager("other-store"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"))
+                        .andReturn();
+
+        assertThat(issue.getResponse().getContentAsString())
+                .doesNotContain("credentialId", "accessUrl", "token", "digest", "QR 다른 업체");
+        assertThat(TableIntegrationSupport.countOf(jdbcClient, "table_qr_credential")).isZero();
+
+        issue(tableId, UUID.randomUUID().toString(), 201);
+
+        MvcResult reissue =
+                mockMvc
+                        .perform(
+                                post("/tables/{tableId}/qr-credentials/reissue", tableId)
+                                        .with(identityManager("other-store"))
+                                        .header("Idempotency-Key", UUID.randomUUID().toString()))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"))
+                        .andReturn();
+
+        assertThat(reissue.getResponse().getContentAsString())
+                .doesNotContain("credentialId", "accessUrl", "token", "digest", "QR 다른 업체");
+        assertThat(activeCredentialCount()).isEqualTo(1);
+        assertThat(TableIntegrationSupport.countOf(jdbcClient, "table_qr_credential")).isEqualTo(1);
     }
 
     @Test
@@ -294,5 +337,14 @@ class TableQrCredentialApiIntegrationTest {
                 .param("status", status)
                 .query(Long.class)
                 .single();
+    }
+
+    private RequestPostProcessor identityManager(String tenantId) {
+        UUID accountId = UUID.randomUUID();
+        IdentityPrincipal principal =
+                new IdentityPrincipal(accountId, tenantId, "MANAGER", Set.of("table.manage"), false);
+        return authentication(
+                new UsernamePasswordAuthenticationToken(
+                        principal, "N/A", List.of(new SimpleGrantedAuthority("table.manage"))));
     }
 }

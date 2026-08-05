@@ -1,6 +1,7 @@
 package com.dorosoft.erp.table;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -9,8 +10,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.dorosoft.erp.identity.infrastructure.security.IdentityPrincipal;
 import com.dorosoft.erp.testsupport.TestcontainersConfiguration;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,8 +25,11 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -163,6 +170,75 @@ class TableManagementApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("다른 업체 Principal은 테이블 관리 데이터에 접근하거나 변경할 수 없다")
+    void 다른_업체_관리_접근_차단() throws Exception {
+        CreatedTable table = createTable("TENANT-A", "업체 전용", 4);
+
+        mockMvc
+                .perform(get("/tables").with(identityManager("other-store")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        MvcResult detail =
+                mockMvc
+                        .perform(get("/tables/{tableId}", table.tableId()).with(identityManager("other-store")))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"))
+                        .andReturn();
+        assertThat(detail.getResponse().getContentAsString()).doesNotContain("TENANT-A", "업체 전용");
+
+        MvcResult update =
+                mockMvc
+                        .perform(
+                                put("/tables/{tableId}", table.tableId())
+                                        .with(identityManager("other-store"))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .header("If-Match", table.version())
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .content(
+                                                objectMapper.writeValueAsString(
+                                                        Map.of(
+                                                                "tableNumber", "TENANT-B",
+                                                                "displayName", "침범",
+                                                                "seatCapacity", 6))))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"))
+                        .andReturn();
+        assertThat(update.getResponse().getContentAsString()).doesNotContain("TENANT-B", "침범");
+
+        MvcResult activation =
+                mockMvc
+                        .perform(
+                                patch("/tables/{tableId}/activation", table.tableId())
+                                        .with(identityManager("other-store"))
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .header("If-Match", table.version())
+                                        .header("Idempotency-Key", UUID.randomUUID().toString())
+                                        .content(objectMapper.writeValueAsString(Map.of("active", false))))
+                        .andExpect(status().isNotFound())
+                        .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"))
+                        .andReturn();
+        assertThat(activation.getResponse().getContentAsString()).doesNotContain("TENANT-A", "업체 전용");
+
+        mockMvc
+                .perform(
+                        post("/tables")
+                                .with(identityManager("other-store"))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .header("Idempotency-Key", UUID.randomUUID().toString())
+                                .content(
+                                        objectMapper.writeValueAsString(
+                                                Map.of(
+                                                        "tableNumber", "TENANT-C",
+                                                        "displayName", "다른 업체 생성",
+                                                        "seatCapacity", 4))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TABLE_NOT_FOUND"));
+
+        assertThat(TableIntegrationSupport.countOf(jdbcClient, "store_table")).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("같은 Idempotency-Key와 같은 요청은 등록을 반복하지 않고 저장된 응답을 재생한다")
     void 같은_요청_반복은_중복_등록하지_않는다() throws Exception {
         String idempotencyKey = UUID.randomUUID().toString();
@@ -251,6 +327,15 @@ class TableManagementApiIntegrationTest {
                         .andExpect(status().is(expectedStatus))
                         .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private RequestPostProcessor identityManager(String tenantId) {
+        UUID accountId = UUID.randomUUID();
+        IdentityPrincipal principal =
+                new IdentityPrincipal(accountId, tenantId, "MANAGER", Set.of("table.manage"), false);
+        return authentication(
+                new UsernamePasswordAuthenticationToken(
+                        principal, "N/A", List.of(new SimpleGrantedAuthority("table.manage"))));
     }
 
     private record CreatedTable(UUID tableId, long version) {}

@@ -53,6 +53,7 @@ public class TableManagementService {
     @Transactional
     public TableResponse create(CreateTableCommand command, TableOperationContext context) {
         try {
+            verifyTenant(context);
             TableDetails details = validate(command.tableNumber(), command.displayName(), command.seatCapacity());
             ensureNumberAvailable(details.normalizedNumber(), null);
 
@@ -98,7 +99,10 @@ public class TableManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<TableResponse> getTables() {
+    public List<TableResponse> getTables(TableOperationContext context) {
+        if (!tenantMatches(context)) {
+            return List.of();
+        }
         List<StoreTableEntity> tables = tableRepository.findAllByOrderByNormalizedNumberAsc();
         var statuses = usageStatusReader.getUsageStatuses(tables.stream().map(StoreTableEntity::getTableId).toList());
         return tables.stream()
@@ -107,7 +111,8 @@ public class TableManagementService {
     }
 
     @Transactional(readOnly = true)
-    public TableResponse getTable(UUID tableId) {
+    public TableResponse getTable(UUID tableId, TableOperationContext context) {
+        verifyTenant(context);
         StoreTableEntity table = findExisting(tableId);
         return toResponse(table, usageStatusReader.getUsageStatus(tableId));
     }
@@ -119,6 +124,7 @@ public class TableManagementService {
             UpdateTableCommand command,
             TableOperationContext context) {
         try {
+            verifyTenant(context);
             StoreTableEntity table = findExisting(tableId);
             verifyVersion(table, expectedVersion);
             Map<String, Object> beforeValue = tableAuditValue(table);
@@ -171,6 +177,7 @@ public class TableManagementService {
             boolean active,
             TableOperationContext context) {
         try {
+            verifyTenant(context);
             StoreTableEntity table = findExisting(tableId);
             verifyVersion(table, expectedVersion);
             Map<String, Object> beforeValue = tableActivationAuditValue(table);
@@ -211,12 +218,17 @@ public class TableManagementService {
     private StoreTableEntity findExisting(UUID tableId) {
         return tableRepository
                 .findById(tableId)
-                .orElseThrow(
-                        () ->
-                                new TableManagementException(
-                                        HttpStatus.NOT_FOUND,
-                                        TableErrorCode.TABLE_NOT_FOUND,
-                                        "Table not found. tableId=" + tableId));
+                .orElseThrow(TableManagementService::tableNotFound);
+    }
+
+    private boolean tenantMatches(TableOperationContext context) {
+        return tenantId.equals(context.tenantId());
+    }
+
+    private void verifyTenant(TableOperationContext context) {
+        if (!tenantMatches(context)) {
+            throw tableNotFound();
+        }
     }
 
     private void verifyVersion(StoreTableEntity table, long expectedVersion) {
@@ -336,6 +348,13 @@ public class TableManagementService {
                 HttpStatus.CONFLICT,
                 TableErrorCode.TABLE_NUMBER_DUPLICATED,
                 "Table number is already in use.");
+    }
+
+    private static TableManagementException tableNotFound() {
+        return new TableManagementException(
+                HttpStatus.NOT_FOUND,
+                TableErrorCode.TABLE_NOT_FOUND,
+                "Table not found.");
     }
 
     public record CreateTableCommand(

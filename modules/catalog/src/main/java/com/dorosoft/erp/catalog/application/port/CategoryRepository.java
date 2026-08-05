@@ -21,6 +21,9 @@ public interface CategoryRepository {
     /** 전체 Category 순서를 0부터 다시 부여한다. 대상 집합 검증은 호출자(Application Service)가 미리 마친다. */
     void replaceDisplayOrder(List<UUID> orderedCategoryIds);
 
+    /** 해당 Catalog 안에서 다음 표시 순서(현재 최대값 + 1)를 반환한다. 대상이 없으면 0이다. */
+    int nextDisplayOrder(UUID catalogId);
+
     /** 이전에 사용된 Idempotency-Key라면 그 결과 Category를 반환한다(생성 API 공통 계약). */
     Optional<Category> findByIdempotencyKey(String idempotencyKey);
 }

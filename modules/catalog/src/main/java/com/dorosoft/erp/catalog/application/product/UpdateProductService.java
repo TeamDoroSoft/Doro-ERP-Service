@@ -1,6 +1,7 @@
 package com.dorosoft.erp.catalog.application.product;
 
 import com.dorosoft.erp.catalog.application.audit.CatalogAuditValues;
+import com.dorosoft.erp.catalog.application.concurrency.DisplayOrderConflictSupport;
 import com.dorosoft.erp.catalog.application.port.CatalogRevisionRepository;
 import com.dorosoft.erp.catalog.application.port.CategoryRepository;
 import com.dorosoft.erp.catalog.application.port.ProductMediaRepository;
@@ -18,6 +19,8 @@ import com.dorosoft.erp.catalog.domain.product.Product;
 import com.dorosoft.erp.catalog.domain.product.ProductNotFoundException;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
  * 상품 기본 정보 전체 교체(FR-MENU-002). soldOut과 options는 이 Use Case가 다루지 않는다.
  * 가격·대표 이미지가 실제로 바뀐 경우 PRODUCT_UPDATED 외에 PRODUCT_PRICE_CHANGED·
  * PRODUCT_IMAGE_CHANGED를 같은 operationId·증가하는 eventSequence로 추가 기록한다(5.17).
+ *
+ * <p>다른 Product가 이동해 들어오며 대상 Category의 마지막 순서를 다투면 uk_product_display_order UNIQUE
+ * 위반({@link DataIntegrityViolationException}) 또는 InnoDB 순환 대기로 인한 강제 종료
+ * ({@link CannotAcquireLockException})가 나타날 수 있다. 둘 다 OptimisticLockingFailureException으로
+ * 번역해 그대로 전파한다(동시 생성·유입 충돌, 서버가 재시도하지 않는다).
  */
 @Service
 public class UpdateProductService {
@@ -69,7 +77,7 @@ public class UpdateProductService {
         int displayOrder =
                 current.categoryId().equals(command.categoryId())
                         ? current.displayOrder()
-                        : (int) productRepository.countByCategory(command.categoryId());
+                        : productRepository.nextDisplayOrder(command.categoryId());
 
         Product updated =
                 current.replaceBasicInfo(
@@ -82,8 +90,19 @@ public class UpdateProductService {
                         command.salesEnabled(),
                         command.stockManaged(),
                         displayOrder);
-        Product saved = productRepository.save(updated);
-        catalogRevisionRepository.advance();
+        Product saved;
+        try {
+            saved = productRepository.save(updated);
+            catalogRevisionRepository.advance();
+        } catch (DataIntegrityViolationException | CannotAcquireLockException ex) {
+            if (ex instanceof CannotAcquireLockException
+                    || DisplayOrderConflictSupport.matchesConstraint(
+                            (DataIntegrityViolationException) ex, "uk_product_display_order")) {
+                throw new OptimisticLockingFailureException(
+                        "Product 표시 순서가 동시 생성·유입 요청과 충돌했습니다. categoryId=" + command.categoryId(), ex);
+            }
+            throw ex;
+        }
 
         recordAudit(current, saved, auditContext);
 

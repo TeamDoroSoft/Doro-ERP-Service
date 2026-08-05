@@ -4,9 +4,13 @@ plugins {
 
 dependencies {
     implementation(project(":modules:audit"))
+    implementation(project(":modules:identity"))
+    implementation(project(":platform:web"))
 
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("tools.jackson.core:jackson-databind")
 
     implementation(platform("software.amazon.awssdk:bom:2.29.52"))
@@ -15,6 +19,8 @@ dependencies {
 
     testImplementation(project(":test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.springframework.boot:spring-boot-starter-flyway")
     testImplementation("org.flywaydb:flyway-mysql")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")

@@ -25,7 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-public final class DefaultPrivacyAccessLogger implements PrivacyAccessLogger {
+public class DefaultPrivacyAccessLogger implements PrivacyAccessLogger {
     private static final Set<String> SUBJECT_TYPES = Set.of(
             "EMPLOYEE", "WAITING_CUSTOMER", "RESERVATION_CUSTOMER", "PICKUP_CUSTOMER");
 

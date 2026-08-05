@@ -58,6 +58,11 @@ public class JpaCategoryRepositoryAdapter implements CategoryRepository {
         return toDomain(saved);
     }
 
+    @Override
+    public int nextDisplayOrder(UUID catalogId) {
+        return jpaRepository.findMaxDisplayOrder(catalogId) + 1;
+    }
+
     /** display_order >= 0 CHECK 제약을 지키면서 UNIQUE 충돌도 피하는 임시 오프셋. */
     private static final int REORDER_TEMP_OFFSET = 1_000_000;
 

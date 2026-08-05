@@ -76,8 +76,8 @@ public class JpaProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
-    public long countByCategory(UUID categoryId) {
-        return jpaRepository.countByCategoryId(categoryId);
+    public int nextDisplayOrder(UUID categoryId) {
+        return jpaRepository.findMaxDisplayOrder(categoryId) + 1;
     }
 
     @Override

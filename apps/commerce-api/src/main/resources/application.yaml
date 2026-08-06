@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: commerce-api
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${COMMERCE_DB_URL:jdbc:postgresql://localhost:5432/commerce_db}
+    username: ${COMMERCE_DB_USERNAME:}
+    password: ${COMMERCE_DB_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+server:
+  port: ${COMMERCE_PORT:8082}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

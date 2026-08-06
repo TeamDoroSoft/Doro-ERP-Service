@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: store-access-api
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${STORE_ACCESS_DB_URL:jdbc:postgresql://localhost:5432/store_access_db}
+    username: ${STORE_ACCESS_DB_USERNAME:}
+    password: ${STORE_ACCESS_DB_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  data:
+    redis:
+      host: ${STORE_ACCESS_REDIS_HOST:localhost}
+      port: ${STORE_ACCESS_REDIS_PORT:6379}
+      username: ${STORE_ACCESS_REDIS_USERNAME:}
+      password: ${STORE_ACCESS_REDIS_PASSWORD:}
+      ssl:
+        enabled: ${STORE_ACCESS_REDIS_SSL_ENABLED:false}
+  session:
+    timeout: ${STORE_ACCESS_SESSION_TIMEOUT:30m}
+    redis:
+      namespace: ${STORE_ACCESS_SESSION_NAMESPACE:doro:store-access:session}
+
+server:
+  port: ${STORE_ACCESS_PORT:8081}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

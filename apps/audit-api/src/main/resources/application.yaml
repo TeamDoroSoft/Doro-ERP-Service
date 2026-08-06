@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: audit-api
+  config:
+    import: optional:file:.env[.properties]
+  data:
+    mongodb:
+      uri: ${AUDIT_MONGODB_URI:mongodb://localhost:27017/audit}
+      auto-index-creation: false
+
+server:
+  port: ${AUDIT_PORT:8085}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

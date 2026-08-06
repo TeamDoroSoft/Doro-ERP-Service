@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: queue-api
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${QUEUE_DB_URL:jdbc:postgresql://localhost:5432/queue_db}
+    username: ${QUEUE_DB_USERNAME:}
+    password: ${QUEUE_DB_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+server:
+  port: ${QUEUE_PORT:8084}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true

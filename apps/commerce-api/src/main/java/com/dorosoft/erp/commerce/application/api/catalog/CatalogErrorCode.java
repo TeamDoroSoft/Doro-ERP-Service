@@ -13,6 +13,7 @@ public enum CatalogErrorCode implements ProblemCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한 부족"),
     CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Category를 찾을 수 없음"),
     PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "상품을 찾을 수 없음"),
+    PRODUCT_NOT_SELLABLE(HttpStatus.CONFLICT, "판매할 수 없는 상품"),
     CATEGORY_NAME_DUPLICATED(HttpStatus.CONFLICT, "Category 이름 중복"),
     PRODUCT_NAME_DUPLICATED(HttpStatus.CONFLICT, "상품 이름 중복"),
     PRECONDITION_REQUIRED(HttpStatus.PRECONDITION_REQUIRED, "현재 version 필요"),

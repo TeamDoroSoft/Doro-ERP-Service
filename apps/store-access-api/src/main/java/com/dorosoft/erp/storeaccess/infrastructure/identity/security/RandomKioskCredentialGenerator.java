@@ -1,5 +1,6 @@
 package com.dorosoft.erp.storeaccess.infrastructure.identity.security;
 
+import com.dorosoft.erp.storeaccess.application.api.identity.KioskCredentialFormat;
 import com.dorosoft.erp.storeaccess.application.port.identity.GeneratedKioskCredential;
 import com.dorosoft.erp.storeaccess.application.port.identity.KioskCredentialGenerator;
 import java.security.SecureRandom;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class RandomKioskCredentialGenerator implements KioskCredentialGenerator {
 
-    private static final String CREDENTIAL_PREFIX = "kdc_";
     private static final int CREDENTIAL_ID_BYTES = 24;
     private static final int SECRET_BYTES = 32;
 
@@ -23,7 +23,7 @@ public class RandomKioskCredentialGenerator implements KioskCredentialGenerator 
     public GeneratedKioskCredential generate() {
         String credentialId = randomBase64Url(CREDENTIAL_ID_BYTES);
         String secret = randomBase64Url(SECRET_BYTES);
-        String fullCredential = CREDENTIAL_PREFIX + credentialId + "." + secret;
+        String fullCredential = KioskCredentialFormat.format(credentialId, secret);
         return new GeneratedKioskCredential(credentialId, secret, fullCredential);
     }
 

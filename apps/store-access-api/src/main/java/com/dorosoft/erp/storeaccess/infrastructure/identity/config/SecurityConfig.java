@@ -1,7 +1,9 @@
 package com.dorosoft.erp.storeaccess.infrastructure.identity.config;
 
 import com.dorosoft.erp.storeaccess.application.api.identity.AuthProblemCode;
+import com.dorosoft.erp.storeaccess.application.api.identity.KioskAuthenticationService;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeeSessionAuthenticationFilter;
+import com.dorosoft.erp.storeaccess.infrastructure.identity.security.KioskDeviceAuthenticationFilter;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.ProblemResponseWriter;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.SessionIdleRenewalInterceptor;
 import java.time.Clock;
@@ -27,9 +29,10 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * Employee Session authentication and Endpoint authorization (ADR-02-002/003/007/011). Role and Tenant Scope
- * are re-verified inside each Application Service (ADR-02-010); this layer only decides whether a request
- * carries a valid employee Session, matching "Role과 Tenant Scope를 Application 계층에서도 재검증한다".
+ * Employee Session and Kiosk Cookie authentication and Endpoint authorization
+ * (ADR-02-002/003/007/011/013). Role and Tenant Scope are re-verified inside each Application Service
+ * (ADR-02-010); this layer only decides whether a request carries a valid employee Session or Kiosk Cookie,
+ * matching "Role과 Tenant Scope를 Application 계층에서도 재검증한다".
  *
  * <p>Session persistence is entirely custom ({@link EmployeeSessionAuthenticationFilter} /
  * {@link SessionIdleRenewalInterceptor}), so Spring Security's own context repository and Request Cache are
@@ -60,7 +63,7 @@ public class SecurityConfig {
      * entirely, so both must be removed. Left in place, the moment anything elsewhere in the Servlet/MVC
      * stack calls {@code getSession()}, it silently touches/renews the Session's {@code lastAccessedTime} —
      * exactly the "any access extends idle timeout" behavior ADR-02-003 requires NOT happen outside Endpoints
-     * explicitly marked {@link com.dorosoft.erp.storeaccess.infrastructure.identity.security.UserActivity}
+     * explicitly marked {@link com.dorosoft.erp.storeaccess.application.api.identity.UserActivity}
      * (confirmed by reproducing a passive request's Session gaining a fresh {@code lastAccessedTime} it
      * should not have). Removing both bean definitions by name — as a {@code static}
      * {@link BeanFactoryPostProcessor} bean method, so it runs before either definition is processed — is the
@@ -107,6 +110,22 @@ public class SecurityConfig {
     }
 
     @Bean
+    public KioskDeviceAuthenticationFilter kioskDeviceAuthenticationFilter(
+            KioskAuthenticationService kioskAuthenticationService, ProblemResponseWriter problemResponseWriter) {
+        return new KioskDeviceAuthenticationFilter(kioskAuthenticationService, problemResponseWriter);
+    }
+
+    /** See {@link #employeeSessionAuthenticationFilterRegistration} — the same Boot-generic-Filter-bean
+     * auto-registration must be disabled here too, leaving only the {@code .addFilterAfter} wiring below. */
+    @Bean
+    public FilterRegistrationBean<KioskDeviceAuthenticationFilter> kioskDeviceAuthenticationFilterRegistration(
+            KioskDeviceAuthenticationFilter filter) {
+        FilterRegistrationBean<KioskDeviceAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    @Bean
     public SessionIdleRenewalInterceptor sessionIdleRenewalInterceptor(
             ObjectProvider<SessionRepository<? extends Session>> sessionRepositoryProvider, Clock clock) {
         return new SessionIdleRenewalInterceptor(sessionRepositoryProvider, clock);
@@ -126,6 +145,7 @@ public class SecurityConfig {
     public SecurityFilterChain identitySecurityFilterChain(
             HttpSecurity http,
             EmployeeSessionAuthenticationFilter employeeSessionAuthenticationFilter,
+            KioskDeviceAuthenticationFilter kioskDeviceAuthenticationFilter,
             ProblemResponseWriter problemResponseWriter) throws Exception {
         http
                 .securityContext(AbstractHttpConfigurer::disable)
@@ -150,7 +170,8 @@ public class SecurityConfig {
                             .requestMatchers("/actuator/**").permitAll()
                             .anyRequest().authenticated();
                 })
-                .addFilterBefore(employeeSessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(employeeSessionAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(kioskDeviceAuthenticationFilter, EmployeeSessionAuthenticationFilter.class);
         return http.build();
     }
 }

@@ -18,7 +18,8 @@ public record KioskDevice(
         int credentialVersion,
         KioskDeviceStatus status,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        Instant lastAuthenticatedAt) {
 
     private static final int MAX_DEVICE_CODE_LENGTH = 100;
     private static final int MAX_CREDENTIAL_ID_LENGTH = 100;
@@ -43,7 +44,8 @@ public record KioskDevice(
     public static KioskDevice register(
             UUID id, UUID tenantId, UUID storeId, String deviceCode, String credentialId, String secretDigest, Instant now) {
         return new KioskDevice(
-                id, tenantId, storeId, deviceCode, credentialId, secretDigest, 1, KioskDeviceStatus.ACTIVE, now, now);
+                id, tenantId, storeId, deviceCode, credentialId, secretDigest, 1, KioskDeviceStatus.ACTIVE, now, now,
+                null);
     }
 
     /**
@@ -53,14 +55,25 @@ public record KioskDevice(
     public KioskDevice rotate(String newCredentialId, String newSecretDigest, Instant now) {
         return new KioskDevice(
                 id, tenantId, storeId, deviceCode, newCredentialId, newSecretDigest, credentialVersion + 1,
-                status, createdAt, now);
+                status, createdAt, now, lastAuthenticatedAt);
     }
 
     /** Revokes the device (ADR-02-013): a status change, not a physical delete, so past orders are preserved. */
     public KioskDevice revoke(Instant now) {
         return new KioskDevice(
                 id, tenantId, storeId, deviceCode, credentialId, secretDigest, credentialVersion + 1,
-                KioskDeviceStatus.REVOKED, createdAt, now);
+                KioskDeviceStatus.REVOKED, createdAt, now, lastAuthenticatedAt);
+    }
+
+    /**
+     * Records a successful Kiosk Cookie authentication (ADR-02-013), used only to decide whether the current
+     * Cookie's remaining 30-day Max-Age has dropped to 7 days or fewer and therefore needs reissuing — never
+     * persisted as a separate Session/Token record.
+     */
+    public KioskDevice recordAuthentication(Instant now) {
+        return new KioskDevice(
+                id, tenantId, storeId, deviceCode, credentialId, secretDigest, credentialVersion, status, createdAt,
+                now, now);
     }
 
     private static void requireNonBlank(String value, String field, int maxLength) {

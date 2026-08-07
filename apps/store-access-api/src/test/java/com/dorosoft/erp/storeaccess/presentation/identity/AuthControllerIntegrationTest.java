@@ -12,7 +12,7 @@ import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeAccountRep
 import com.dorosoft.erp.storeaccess.application.port.identity.TenantLookupPort;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeAccount;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
-import com.dorosoft.erp.storeaccess.infrastructure.identity.security.UserActivity;
+import com.dorosoft.erp.storeaccess.application.api.identity.UserActivity;
 import jakarta.servlet.http.Cookie;
 import java.time.Clock;
 import java.util.Map;
@@ -96,6 +96,11 @@ class AuthControllerIntegrationTest {
         @Override
         public Optional<ActiveTenantContext> resolveActiveTenantByCode(String tenantCode) {
             return Optional.ofNullable(tenants.get(tenantCode));
+        }
+
+        @Override
+        public Optional<ActiveTenantContext> resolveActiveTenantById(UUID tenantId) {
+            return tenants.values().stream().filter(tenant -> tenant.tenantId().equals(tenantId)).findFirst();
         }
     }
 

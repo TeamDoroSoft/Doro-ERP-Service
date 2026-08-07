@@ -26,6 +26,11 @@ class KioskDeviceRepositoryAdapter implements KioskDeviceRepository {
     }
 
     @Override
+    public Optional<KioskDevice> findByTenantIdAndDeviceCode(UUID tenantId, String deviceCode) {
+        return jpaRepository.findByTenantIdAndDeviceCode(tenantId, deviceCode).map(KioskDeviceEntity::toDomain);
+    }
+
+    @Override
     public KioskDevice save(KioskDevice device) {
         KioskDeviceEntity saved = jpaRepository.saveAndFlush(KioskDeviceEntity.fromDomain(device));
         return saved.toDomain();

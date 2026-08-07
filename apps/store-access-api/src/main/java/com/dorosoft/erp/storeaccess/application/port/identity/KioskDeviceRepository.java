@@ -10,5 +10,7 @@ public interface KioskDeviceRepository {
 
     Optional<KioskDevice> findByCredentialId(String credentialId);
 
+    Optional<KioskDevice> findByTenantIdAndDeviceCode(UUID tenantId, String deviceCode);
+
     KioskDevice save(KioskDevice device);
 }

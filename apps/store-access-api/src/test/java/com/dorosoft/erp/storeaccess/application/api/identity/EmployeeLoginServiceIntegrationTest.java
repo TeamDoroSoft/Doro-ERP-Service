@@ -88,6 +88,11 @@ class EmployeeLoginServiceIntegrationTest {
         public Optional<ActiveTenantContext> resolveActiveTenantByCode(String tenantCode) {
             return Optional.ofNullable(tenants.get(tenantCode));
         }
+
+        @Override
+        public Optional<ActiveTenantContext> resolveActiveTenantById(UUID tenantId) {
+            return tenants.values().stream().filter(tenant -> tenant.tenantId().equals(tenantId)).findFirst();
+        }
     }
 
     private static final String PASSWORD = "the-current-passphrase-value";

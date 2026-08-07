@@ -75,7 +75,12 @@ public class GlobalProblemAdvice extends ResponseEntityExceptionHandler {
         if (problemDetail.getInstance() == null) {
             problemDetail.setInstance(java.net.URI.create("urn:doro-erp:request:" + requestId));
         }
-        return ResponseEntity.status(ex.code().status())
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.code().status());
+        Integer retryAfterSeconds = ex.code().retryAfterSeconds();
+        if (retryAfterSeconds != null) {
+            response = response.header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
+        }
+        return response
                 .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                 .body(problemDetail);
     }

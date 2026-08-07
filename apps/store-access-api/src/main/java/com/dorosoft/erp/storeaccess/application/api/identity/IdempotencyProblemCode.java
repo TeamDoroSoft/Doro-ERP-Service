@@ -3,21 +3,20 @@ package com.dorosoft.erp.storeaccess.application.api.identity;
 import com.dorosoft.erp.platform.web.ProblemCode;
 import org.springframework.http.HttpStatus;
 
-/**
- * Error contract for Idempotency-Key conflicts (ADR-02-014). A future Controller must add a
- * {@code Retry-After} header (1 second) to {@link #IDEMPOTENCY_REQUEST_IN_PROGRESS} responses.
- */
+/** Error contract for Idempotency-Key conflicts (ADR-02-014). */
 public enum IdempotencyProblemCode implements ProblemCode {
 
-    IDEMPOTENCY_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "동일한 요청이 이미 처리 중입니다."),
-    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "이미 사용된 Idempotency-Key이며 요청 내용이 다릅니다.");
+    IDEMPOTENCY_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "동일한 요청이 이미 처리 중입니다.", 1),
+    IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT, "이미 사용된 Idempotency-Key이며 요청 내용이 다릅니다.", null);
 
     private final HttpStatus status;
     private final String title;
+    private final Integer retryAfterSeconds;
 
-    IdempotencyProblemCode(HttpStatus status, String title) {
+    IdempotencyProblemCode(HttpStatus status, String title, Integer retryAfterSeconds) {
         this.status = status;
         this.title = title;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 
     @Override
@@ -33,5 +32,10 @@ public enum IdempotencyProblemCode implements ProblemCode {
     @Override
     public String title() {
         return title;
+    }
+
+    @Override
+    public Integer retryAfterSeconds() {
+        return retryAfterSeconds;
     }
 }

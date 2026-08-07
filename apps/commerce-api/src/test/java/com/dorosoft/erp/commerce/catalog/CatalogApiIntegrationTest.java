@@ -13,8 +13,7 @@ import com.dorosoft.erp.commerce.application.api.security.ActorRole;
 import com.dorosoft.erp.commerce.infrastructure.security.ActorContextFilter;
 import com.dorosoft.erp.commerce.support.CatalogTestFixtures;
 import com.dorosoft.erp.commerce.support.CommerceIntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,9 +37,6 @@ class CatalogApiIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     @AfterEach
     void tearDown() {
@@ -233,9 +229,9 @@ class CatalogApiIntegrationTest {
         return UUID.fromString(read(body, "productId"));
     }
 
-    private String read(String body, String field) throws Exception {
-        JsonNode node = objectMapper.readTree(body);
-        return node.get(field).asText();
+    /** Jackson Version에 흔들리지 않도록 응답 본문은 JsonPath로 읽는다. */
+    private static String read(String body, String field) {
+        return JsonPath.read(body, "$." + field);
     }
 
     /** 통합 Test는 서명 검증을 끄고 Edge가 전달하는 Actor Context Header만 사용한다. */

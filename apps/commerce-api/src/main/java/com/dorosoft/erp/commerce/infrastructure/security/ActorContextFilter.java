@@ -6,7 +6,6 @@ import com.dorosoft.erp.commerce.application.api.security.ActorContextHolder;
 import com.dorosoft.erp.commerce.application.api.security.ActorRole;
 import com.dorosoft.erp.commerce.application.api.security.ActorType;
 import com.dorosoft.erp.platform.web.RequestIdFilter;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,6 +25,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Edge 또는 Store Access가 검증한 Actor Context를 서명과 함께 받아 확인하는 인증 Filter.

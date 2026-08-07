@@ -2,8 +2,6 @@ package com.dorosoft.erp.commerce.infrastructure.persistence.audit;
 
 import com.dorosoft.erp.commerce.application.api.audit.AuditRecord;
 import com.dorosoft.erp.commerce.application.port.audit.AuditRecorderPort;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
@@ -12,6 +10,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Audit Event를 업무 변경과 같은 Local Transaction의 Outbox에 기록한다.
@@ -90,7 +90,9 @@ class AuditOutboxRecorderAdapter implements AuditRecorderPort {
     private String serialize(Map<String, Object> envelope) {
         try {
             return objectMapper.writeValueAsString(envelope);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
+            // Jackson 3의 JacksonException은 Unchecked다. 직렬화 실패는 Audit Payload 결함이므로
+            // 조용히 넘기지 않고 업무 Transaction과 함께 Rollback되도록 다시 던진다.
             throw new IllegalStateException("audit event payload could not be serialized", exception);
         }
     }

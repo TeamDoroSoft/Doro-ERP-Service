@@ -46,6 +46,23 @@ public record KioskDevice(
                 id, tenantId, storeId, deviceCode, credentialId, secretDigest, 1, KioskDeviceStatus.ACTIVE, now, now);
     }
 
+    /**
+     * Issues a new credential with no grace period (ADR-02-013): the previous {@code credentialId} stops
+     * resolving to this device immediately, since this replaces the stored value rather than appending one.
+     */
+    public KioskDevice rotate(String newCredentialId, String newSecretDigest, Instant now) {
+        return new KioskDevice(
+                id, tenantId, storeId, deviceCode, newCredentialId, newSecretDigest, credentialVersion + 1,
+                status, createdAt, now);
+    }
+
+    /** Revokes the device (ADR-02-013): a status change, not a physical delete, so past orders are preserved. */
+    public KioskDevice revoke(Instant now) {
+        return new KioskDevice(
+                id, tenantId, storeId, deviceCode, credentialId, secretDigest, credentialVersion + 1,
+                KioskDeviceStatus.REVOKED, createdAt, now);
+    }
+
     private static void requireNonBlank(String value, String field, int maxLength) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(field + " must not be blank");

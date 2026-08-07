@@ -51,4 +51,35 @@ class KioskDeviceTest {
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), tooLong, "cred-abc123", "digest", now))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void rotateReplacesCredentialAndIncrementsVersionWithoutChangingStatus() {
+        KioskDevice device = KioskDevice.register(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "POS-01", "cred-abc123", "digest-1", now);
+        Instant rotatedAt = now.plusSeconds(60);
+
+        KioskDevice rotated = device.rotate("cred-xyz789", "digest-2", rotatedAt);
+
+        assertThat(rotated.credentialId()).isEqualTo("cred-xyz789");
+        assertThat(rotated.secretDigest()).isEqualTo("digest-2");
+        assertThat(rotated.credentialVersion()).isEqualTo(2);
+        assertThat(rotated.status()).isEqualTo(KioskDeviceStatus.ACTIVE);
+        assertThat(rotated.updatedAt()).isEqualTo(rotatedAt);
+        assertThat(rotated.createdAt()).isEqualTo(device.createdAt());
+    }
+
+    @Test
+    void revokeSetsStatusRevokedAndIncrementsVersionWithoutChangingCredential() {
+        KioskDevice device = KioskDevice.register(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), "POS-01", "cred-abc123", "digest-1", now);
+        Instant revokedAt = now.plusSeconds(60);
+
+        KioskDevice revoked = device.revoke(revokedAt);
+
+        assertThat(revoked.status()).isEqualTo(KioskDeviceStatus.REVOKED);
+        assertThat(revoked.credentialVersion()).isEqualTo(2);
+        assertThat(revoked.credentialId()).isEqualTo(device.credentialId());
+        assertThat(revoked.secretDigest()).isEqualTo(device.secretDigest());
+        assertThat(revoked.updatedAt()).isEqualTo(revokedAt);
+    }
 }

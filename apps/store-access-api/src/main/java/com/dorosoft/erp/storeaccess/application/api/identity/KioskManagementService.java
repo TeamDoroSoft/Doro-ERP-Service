@@ -28,16 +28,19 @@ public class KioskManagementService {
     private final KioskDeviceRepository kioskDeviceRepository;
     private final KioskCredentialGenerator credentialGenerator;
     private final KioskCredentialDigestSigner digestSigner;
+    private final SecurityHistoryRecorder securityHistoryRecorder;
     private final Clock clock;
 
     public KioskManagementService(
             KioskDeviceRepository kioskDeviceRepository,
             KioskCredentialGenerator credentialGenerator,
             KioskCredentialDigestSigner digestSigner,
+            SecurityHistoryRecorder securityHistoryRecorder,
             Clock clock) {
         this.kioskDeviceRepository = kioskDeviceRepository;
         this.credentialGenerator = credentialGenerator;
         this.digestSigner = digestSigner;
+        this.securityHistoryRecorder = securityHistoryRecorder;
         this.clock = clock;
     }
 
@@ -49,6 +52,8 @@ public class KioskManagementService {
                 UUID.randomUUID(), actor.tenantId(), actor.storeId(), deviceCode, generated.credentialId(),
                 digestSigner.digestSecret(generated.secret()), clock.instant());
         KioskDevice saved = kioskDeviceRepository.save(device);
+        securityHistoryRecorder.recordKioskDeviceRegistered(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), saved.id());
         return new KioskCredentialIssuance(saved.id(), generated.fullCredential());
     }
 
@@ -65,6 +70,9 @@ public class KioskManagementService {
         KioskDevice rotated = device.rotate(
                 generated.credentialId(), digestSigner.digestSecret(generated.secret()), clock.instant());
         KioskDevice saved = kioskDeviceRepository.save(rotated);
+        securityHistoryRecorder.recordKioskCredentialRotated(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), saved.id(),
+                device.credentialVersion(), saved.credentialVersion());
         return new KioskCredentialIssuance(saved.id(), generated.fullCredential());
     }
 
@@ -73,6 +81,8 @@ public class KioskManagementService {
         requireCanManageKiosk(actor);
         KioskDevice device = requireManageableDevice(actor, kioskDeviceId);
         kioskDeviceRepository.save(device.revoke(clock.instant()));
+        securityHistoryRecorder.recordKioskDeviceRevoked(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), device.id());
     }
 
     private KioskDevice requireManageableDevice(ActorContext actor, UUID kioskDeviceId) {

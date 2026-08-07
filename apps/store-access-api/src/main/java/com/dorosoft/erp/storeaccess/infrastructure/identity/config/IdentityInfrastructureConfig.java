@@ -1,5 +1,7 @@
 package com.dorosoft.erp.storeaccess.infrastructure.identity.config;
 
+import com.dorosoft.erp.storeaccess.application.api.identity.SecurityHistoryRetentionService;
+import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSecurityHistoryRepository;
 import java.time.Clock;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -9,7 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 @EnableConfigurationProperties({
-        IdentityPasswordProperties.class, IdentityHmacProperties.class, IdentityRateLimitProperties.class})
+        IdentityPasswordProperties.class, IdentityHmacProperties.class, IdentityRateLimitProperties.class,
+        SecurityHistoryRetentionProperties.class})
 public class IdentityInfrastructureConfig {
 
     @Bean
@@ -25,5 +28,11 @@ public class IdentityInfrastructureConfig {
                 properties.parallelism(),
                 properties.memoryKib(),
                 properties.iterations());
+    }
+
+    @Bean
+    public SecurityHistoryRetentionService securityHistoryRetentionService(
+            EmployeeSecurityHistoryRepository repository, SecurityHistoryRetentionProperties properties, Clock clock) {
+        return new SecurityHistoryRetentionService(repository, clock, properties.retentionBatchSize());
     }
 }

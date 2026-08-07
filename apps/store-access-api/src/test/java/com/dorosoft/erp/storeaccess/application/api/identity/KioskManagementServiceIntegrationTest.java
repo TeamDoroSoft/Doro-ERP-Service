@@ -5,13 +5,20 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 import com.dorosoft.erp.platform.web.ProblemAwareException;
+import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSecurityHistoryRepository;
 import com.dorosoft.erp.storeaccess.application.port.identity.KioskDeviceRepository;
+import com.dorosoft.erp.storeaccess.application.port.identity.SecurityHistoryQuery;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeAccount;
+import com.dorosoft.erp.storeaccess.domain.identity.EmployeeSecurityHistory;
 import com.dorosoft.erp.storeaccess.domain.identity.KioskDevice;
 import com.dorosoft.erp.storeaccess.domain.identity.KioskDeviceStatus;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryEventType;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +65,9 @@ class KioskManagementServiceIntegrationTest {
 
     @Autowired
     private Clock clock;
+
+    @Autowired
+    private EmployeeSecurityHistoryRepository employeeSecurityHistoryRepository;
 
     @Test
     void ownerCanRegisterDevice() {
@@ -194,6 +204,58 @@ class KioskManagementServiceIntegrationTest {
         KioskDevice secondDevice = kioskDeviceRepository.findById(second.kioskDeviceId()).orElseThrow();
         assertThat(first.credential()).doesNotContain(firstDevice.secretDigest());
         assertThat(firstDevice.secretDigest()).isNotEqualTo(secondDevice.secretDigest());
+    }
+
+    @Test
+    void registeringADeviceRecordsExactlyOneKioskDeviceRegisteredHistoryEntry() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSaveEmployee(tenantId, storeId, Role.OWNER));
+
+        KioskCredentialIssuance issuance = service.registerDevice(owner, "POS-" + UUID.randomUUID());
+
+        List<EmployeeSecurityHistory> history = historyFor(
+                tenantId, SecurityHistoryEventType.KIOSK_DEVICE_REGISTERED, issuance.kioskDeviceId());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).actorEmployeeId()).isEqualTo(owner.employeeId());
+    }
+
+    @Test
+    void rotatingRecordsThePreviousAndNewCredentialVersion() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSaveEmployee(tenantId, storeId, Role.OWNER));
+        KioskCredentialIssuance registered = service.registerDevice(owner, "POS-" + UUID.randomUUID());
+
+        service.rotateCredential(owner, registered.kioskDeviceId());
+
+        List<EmployeeSecurityHistory> history = historyFor(
+                tenantId, SecurityHistoryEventType.KIOSK_CREDENTIAL_ROTATED, registered.kioskDeviceId());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).previousValue()).isEqualTo("1");
+        assertThat(history.get(0).newValue()).isEqualTo("2");
+    }
+
+    @Test
+    void revokingRecordsExactlyOneKioskDeviceRevokedHistoryEntry() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSaveEmployee(tenantId, storeId, Role.OWNER));
+        KioskCredentialIssuance registered = service.registerDevice(owner, "POS-" + UUID.randomUUID());
+
+        service.revokeDevice(owner, registered.kioskDeviceId());
+
+        List<EmployeeSecurityHistory> history = historyFor(
+                tenantId, SecurityHistoryEventType.KIOSK_DEVICE_REVOKED, registered.kioskDeviceId());
+        assertThat(history).hasSize(1);
+    }
+
+    private List<EmployeeSecurityHistory> historyFor(UUID tenantId, SecurityHistoryEventType eventType, UUID targetId) {
+        Instant now = clock.instant();
+        SecurityHistoryQuery query = new SecurityHistoryQuery(
+                tenantId, now.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(1)), eventType, null, targetId,
+                null, null, null, 100, null);
+        return employeeSecurityHistoryRepository.search(query);
     }
 
     private KioskDevice registerRawDevice(ActorContext actor, String deviceCode) {

@@ -30,6 +30,7 @@ public class EmployeeManagementService {
     private final PasswordEncoder passwordEncoder;
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final IdempotencyService idempotencyService;
+    private final SecurityHistoryRecorder securityHistoryRecorder;
     private final Clock clock;
 
     public EmployeeManagementService(
@@ -37,11 +38,13 @@ public class EmployeeManagementService {
             PasswordEncoder passwordEncoder,
             PasswordPolicyValidator passwordPolicyValidator,
             IdempotencyService idempotencyService,
+            SecurityHistoryRecorder securityHistoryRecorder,
             Clock clock) {
         this.employeeAccountRepository = employeeAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicyValidator = passwordPolicyValidator;
         this.idempotencyService = idempotencyService;
+        this.securityHistoryRecorder = securityHistoryRecorder;
         this.clock = clock;
     }
 
@@ -52,7 +55,10 @@ public class EmployeeManagementService {
         Instant now = clock.instant();
         EmployeeAccount created = EmployeeAccount.createWithTemporaryPassword(
                 UUID.randomUUID(), actor.tenantId(), actor.storeId(), loginId, temporaryPasswordHash, targetRole, now);
-        return employeeAccountRepository.save(created);
+        EmployeeAccount saved = employeeAccountRepository.save(created);
+        securityHistoryRecorder.recordEmployeeCreated(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), saved.id(), targetRole);
+        return saved;
     }
 
     /** Idempotent employee creation (ADR-02-014): validates and authorizes before claiming the key. */
@@ -72,7 +78,10 @@ public class EmployeeManagementService {
                     EmployeeAccount created = EmployeeAccount.createWithTemporaryPassword(
                             UUID.randomUUID(), actor.tenantId(), actor.storeId(), loginId, hash, targetRole,
                             clock.instant());
-                    return EmployeeIdentitySnapshot.from(employeeAccountRepository.save(created));
+                    EmployeeAccount saved = employeeAccountRepository.save(created);
+                    securityHistoryRecorder.recordEmployeeCreated(
+                            actor.tenantId(), actor.storeId(), actor.employeeId(), saved.id(), targetRole);
+                    return EmployeeIdentitySnapshot.from(saved);
                 });
     }
 
@@ -84,7 +93,10 @@ public class EmployeeManagementService {
         if (target.role() == Role.OWNER && newRole != Role.OWNER) {
             requireNotLastActiveOwner(actor.tenantId(), target);
         }
-        return employeeAccountRepository.save(target.changeRole(newRole, clock.instant()));
+        EmployeeAccount saved = employeeAccountRepository.save(target.changeRole(newRole, clock.instant()));
+        securityHistoryRecorder.recordRoleChanged(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), target.id(), target.role(), newRole);
+        return saved;
     }
 
     @Transactional
@@ -96,7 +108,10 @@ public class EmployeeManagementService {
                 && newStatus == EmployeeStatus.INACTIVE) {
             requireNotLastActiveOwner(actor.tenantId(), target);
         }
-        return employeeAccountRepository.save(target.changeStatus(newStatus, clock.instant()));
+        EmployeeAccount saved = employeeAccountRepository.save(target.changeStatus(newStatus, clock.instant()));
+        securityHistoryRecorder.recordStatusChanged(
+                actor.tenantId(), actor.storeId(), actor.employeeId(), target.id(), target.status(), newStatus);
+        return saved;
     }
 
     /**
@@ -120,6 +135,8 @@ public class EmployeeManagementService {
                     passwordPolicyValidator.validateNotReusingCurrent(newTemporaryPasswordRaw, target.passwordHash());
                     String hash = passwordEncoder.encode(newTemporaryPasswordRaw);
                     EmployeeAccount updated = employeeAccountRepository.save(target.resetPassword(hash, clock.instant()));
+                    securityHistoryRecorder.recordPasswordReset(
+                            actor.tenantId(), actor.storeId(), actor.employeeId(), target.id());
                     return EmployeeIdentitySnapshot.from(updated);
                 });
     }
@@ -137,7 +154,9 @@ public class EmployeeManagementService {
         }
         passwordPolicyValidator.validate(newPasswordRaw, self.loginId(), self.passwordHash());
         String hash = passwordEncoder.encode(newPasswordRaw);
-        return employeeAccountRepository.save(self.changePassword(hash, clock.instant()));
+        EmployeeAccount saved = employeeAccountRepository.save(self.changePassword(hash, clock.instant()));
+        securityHistoryRecorder.recordPasswordChanged(actor.tenantId(), actor.storeId(), actor.employeeId());
+        return saved;
     }
 
     private EmployeeAccount requireManageableTarget(ActorContext actor, UUID targetEmployeeId) {

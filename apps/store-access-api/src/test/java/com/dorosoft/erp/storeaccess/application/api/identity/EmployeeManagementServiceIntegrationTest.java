@@ -6,11 +6,17 @@ import static org.assertj.core.api.InstanceOfAssertFactories.type;
 
 import com.dorosoft.erp.platform.web.ProblemAwareException;
 import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeAccountRepository;
+import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSecurityHistoryRepository;
+import com.dorosoft.erp.storeaccess.application.port.identity.SecurityHistoryQuery;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeAccount;
+import com.dorosoft.erp.storeaccess.domain.identity.EmployeeSecurityHistory;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeStatus;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryEventType;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -70,6 +76,9 @@ class EmployeeManagementServiceIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EmployeeSecurityHistoryRepository employeeSecurityHistoryRepository;
 
     @Test
     void ownerCanCreateEmployeesOfAnyRole() {
@@ -376,6 +385,110 @@ class EmployeeManagementServiceIntegrationTest {
 
         assertThat(replay).isEqualTo(first);
         assertThat(employeeAccountRepository.findByTenantIdAndLoginId(tenantId, loginId)).isPresent();
+    }
+
+    @Test
+    void creatingAnEmployeeRecordsExactlyOneEmployeeCreatedHistoryEntry() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+
+        EmployeeAccount created = service.createEmployee(owner, freshLoginId(), "argon2-hash", Role.STAFF);
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_CREATED, created.id());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).actorEmployeeId()).isEqualTo(owner.employeeId());
+        assertThat(history.get(0).newValue()).isEqualTo(Role.STAFF.name());
+    }
+
+    @Test
+    void changingRoleRecordsThePreviousAndNewRole() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        EmployeeAccount staff = createAndSave(tenantId, storeId, Role.STAFF, EmployeeStatus.ACTIVE);
+
+        service.changeRole(owner, staff.id(), Role.MANAGER);
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_ROLE_CHANGED, staff.id());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).previousValue()).isEqualTo(Role.STAFF.name());
+        assertThat(history.get(0).newValue()).isEqualTo(Role.MANAGER.name());
+    }
+
+    @Test
+    void changingStatusRecordsThePreviousAndNewStatus() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        EmployeeAccount staff = createAndSave(tenantId, storeId, Role.STAFF, EmployeeStatus.ACTIVE);
+
+        service.changeStatus(owner, staff.id(), EmployeeStatus.INACTIVE);
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_STATUS_CHANGED, staff.id());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).previousValue()).isEqualTo(EmployeeStatus.ACTIVE.name());
+        assertThat(history.get(0).newValue()).isEqualTo(EmployeeStatus.INACTIVE.name());
+    }
+
+    @Test
+    void changingOwnPasswordRecordsEmployeePasswordChangedHistory() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount staffAccount =
+                createAndSaveWithPassword(tenantId, storeId, Role.STAFF, "the-current-passphrase-value");
+        ActorContext staff = actorFor(staffAccount);
+
+        service.changeOwnPassword(staff, "the-current-passphrase-value", "a-completely-new-passphrase-value");
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_PASSWORD_CHANGED, staffAccount.id());
+        assertThat(history).hasSize(1);
+        assertThat(history.get(0).actorEmployeeId()).isEqualTo(staffAccount.id());
+    }
+
+    @Test
+    void replayingAnIdempotentPasswordResetDoesNotDuplicateHistory() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        EmployeeAccount staff = createAndSave(tenantId, storeId, Role.STAFF, EmployeeStatus.ACTIVE);
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        service.resetPassword(owner, idempotencyKey, staff.id(), "a-brand-new-temp-passphrase-1");
+        service.resetPassword(owner, idempotencyKey, staff.id(), "a-brand-new-temp-passphrase-1");
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_PASSWORD_RESET, staff.id());
+        assertThat(history).hasSize(1);
+    }
+
+    @Test
+    void replayingAnIdempotentEmployeeCreationDoesNotDuplicateHistory() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        String idempotencyKey = UUID.randomUUID().toString();
+        LoginId loginId = freshLoginId();
+
+        EmployeeIdentitySnapshot first = service.createEmployeeIdempotently(
+                owner, idempotencyKey, loginId, "a-temporary-passphrase-value", Role.STAFF);
+        service.createEmployeeIdempotently(owner, idempotencyKey, loginId, "a-temporary-passphrase-value", Role.STAFF);
+
+        List<EmployeeSecurityHistory> history =
+                historyFor(tenantId, SecurityHistoryEventType.EMPLOYEE_CREATED, first.employeeId());
+        assertThat(history).hasSize(1);
+    }
+
+    private List<EmployeeSecurityHistory> historyFor(UUID tenantId, SecurityHistoryEventType eventType, UUID targetId) {
+        Instant now = clock.instant();
+        SecurityHistoryQuery query = new SecurityHistoryQuery(
+                tenantId, now.minus(Duration.ofDays(1)), now.plus(Duration.ofDays(1)), eventType, null, targetId,
+                null, null, null, 100, null);
+        return employeeSecurityHistoryRepository.search(query);
     }
 
     private Object resultOrFailure(Future<Object> future) throws InterruptedException {

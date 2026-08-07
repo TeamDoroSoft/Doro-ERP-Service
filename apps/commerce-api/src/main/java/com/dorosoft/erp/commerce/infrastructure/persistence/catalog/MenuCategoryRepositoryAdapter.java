@@ -6,6 +6,7 @@ import com.dorosoft.erp.commerce.domain.catalog.MenuCategory;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -74,6 +75,16 @@ class MenuCategoryRepositoryAdapter implements MenuCategoryRepositoryPort {
         return repository
                 .findByTenantIdAndStatusOrderByDisplayOrderAscIdAsc(tenantId, CatalogStatus.ACTIVE.name())
                 .stream()
+                .map(MenuCategoryRepositoryAdapter::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<MenuCategory> findAllByTenantAndIds(UUID tenantId, Collection<UUID> categoryIds) {
+        if (tenantId == null || categoryIds == null || categoryIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByTenantIdAndIdIn(tenantId, categoryIds).stream()
                 .map(MenuCategoryRepositoryAdapter::toDomain)
                 .toList();
     }

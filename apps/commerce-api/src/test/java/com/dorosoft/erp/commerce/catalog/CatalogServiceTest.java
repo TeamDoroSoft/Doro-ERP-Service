@@ -369,6 +369,25 @@ class CatalogServiceTest {
         }
 
         @Test
+        void staffCanReadTheOperationsListToChangeSoldOut() {
+            MenuCategory category = repositories.seedCategory(TENANT_A, "커피", 1, CatalogStatus.ACTIVE);
+            repositories.seedProduct(TENANT_A, category.id(), "아메리카노", 4500L, CatalogStatus.ACTIVE, true);
+            authenticate(TENANT_A, ActorRole.STAFF);
+
+            assertThat(catalogService.loadManagedProducts()).hasSize(1);
+            assertThat(catalogService.loadManagedCategories()).hasSize(1);
+        }
+
+        @Test
+        void kioskDeviceCannotReadTheOperationsList() {
+            authenticate(TENANT_A, ActorRole.KIOSK_DEVICE);
+
+            assertThatThrownBy(() -> catalogService.loadManagedProducts())
+                    .isInstanceOf(ProblemAwareException.class)
+                    .satisfies(error -> assertThat(problemCode(error)).isEqualTo(CatalogErrorCode.FORBIDDEN));
+        }
+
+        @Test
         void kioskDeviceCanReadSalesMenu() {
             MenuCategory category = repositories.seedCategory(TENANT_A, "커피", 1, CatalogStatus.ACTIVE);
             repositories.seedProduct(TENANT_A, category.id(), "아메리카노", 4500L, CatalogStatus.ACTIVE, false);
@@ -448,7 +467,7 @@ class CatalogServiceTest {
         }
 
         @Test
-        void soldOutProductStaysVisibleButIsNotSellable() {
+        void soldOutProductIsExcludedFromTheSalesMenuButRowRemains() {
             MenuCategory category = repositories.seedCategory(TENANT_A, "커피", 1, CatalogStatus.ACTIVE);
             Product product =
                     repositories.seedProduct(TENANT_A, category.id(), "아메리카노", 4500L, CatalogStatus.ACTIVE, false);
@@ -456,11 +475,25 @@ class CatalogServiceTest {
             catalogService.changeSoldOut(product.id(), 0L, new ChangeSoldOutCommand(true));
 
             authenticate(TENANT_A, ActorRole.KIOSK_DEVICE);
-            var items = catalogService.loadSalesMenu().categories().get(0).products();
+            assertThat(catalogService.loadSalesMenu().categories().get(0).products()).isEmpty();
 
-            assertThat(items).hasSize(1);
-            assertThat(items.get(0).soldOut()).isTrue();
-            assertThat(items.get(0).sellable()).isFalse();
+            // 품절은 판매 메뉴에서만 빠지고 Row와 운영 목록에는 그대로 남는다.
+            authenticate(TENANT_A, ActorRole.STAFF);
+            assertThat(catalogService.loadManagedProducts()).hasSize(1);
+            assertThat(repositories.product(product.id()).soldOut()).isTrue();
+        }
+
+        @Test
+        void resumedProductReappearsInTheSalesMenu() {
+            MenuCategory category = repositories.seedCategory(TENANT_A, "커피", 1, CatalogStatus.ACTIVE);
+            Product product =
+                    repositories.seedProduct(TENANT_A, category.id(), "아메리카노", 4500L, CatalogStatus.ACTIVE, true);
+            authenticate(TENANT_A, ActorRole.STAFF);
+
+            assertThat(catalogService.loadSalesMenu().categories().get(0).products()).isEmpty();
+            catalogService.changeSoldOut(product.id(), 0L, new ChangeSoldOutCommand(false));
+
+            assertThat(catalogService.loadSalesMenu().categories().get(0).products()).hasSize(1);
         }
     }
 

@@ -1,6 +1,7 @@
 package com.dorosoft.erp.commerce.infrastructure.persistence.catalog;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,8 +19,10 @@ public interface ProductJpaRepository extends JpaRepository<ProductEntity, UUID>
     boolean existsByTenantIdAndCategoryId(UUID tenantId, UUID categoryId);
 
     /**
-     * 판매 메뉴 조회. 활성 Category에 속한 활성 상품만 반환한다 (FR-CATALOG-004).
-     * 비활성 Row는 삭제하지 않고 조회에서만 제외한다.
+     * POS·Kiosk 공통 판매 메뉴 조회 (FR-CATALOG-004).
+     *
+     * <p>활성 Category에 속한 활성 상품 중 품절이 아닌 것만 반환한다. 비활성·품절 Row는
+     * 삭제하지 않고 조회에서만 제외한다. 채널별 분기가 없으므로 POS와 Kiosk가 같은 결과를 받는다.
      */
     @Query("""
             select p from ProductEntity p, MenuCategoryEntity c
@@ -28,9 +31,13 @@ public interface ProductJpaRepository extends JpaRepository<ProductEntity, UUID>
                and p.categoryId = c.id
                and p.status = 'ACTIVE'
                and c.status = 'ACTIVE'
+               and p.soldOut = false
              order by c.displayOrder asc, c.id asc, p.displayOrder asc, p.id asc
             """)
     List<ProductEntity> findSalesMenuProducts(@Param("tenantId") UUID tenantId);
+
+    /** 주문용 조회. 존재 여부와 Tenant 소유만 확인하고 판매 가능 여부는 Domain이 판단한다. */
+    List<ProductEntity> findByTenantIdAndIdIn(UUID tenantId, Collection<UUID> productIds);
 
     boolean existsByTenantIdAndName(UUID tenantId, String name);
 

@@ -66,6 +66,8 @@ public class CatalogService implements CatalogQueryUseCase, CatalogCommandUseCas
     public SalesMenuView loadSalesMenu() {
         ActorContext actor = requireActor();
         // 모든 인증 Actor(OWNER·MANAGER·STAFF·KIOSK_DEVICE)가 판매 메뉴를 조회할 수 있다.
+        // Role과 Channel은 접근 허용 여부만 결정하고 결과 집합에는 관여하지 않는다.
+        // 따라서 같은 Tenant·같은 시점의 POS 응답과 Kiosk 응답은 항상 동일하다.
         if (!actor.role().canReadSalesMenu()) {
             throw forbidden();
         }
@@ -82,10 +84,7 @@ public class CatalogService implements CatalogQueryUseCase, CatalogCommandUseCas
                             product.name(),
                             product.description(),
                             product.price(),
-                            product.soldOut(),
-                            !product.soldOut(),
-                            product.displayOrder(),
-                            product.version()));
+                            product.displayOrder()));
         }
 
         List<SalesMenuCategoryView> categories = activeCategories.stream()
@@ -103,7 +102,7 @@ public class CatalogService implements CatalogQueryUseCase, CatalogCommandUseCas
     @Override
     @Transactional(readOnly = true)
     public List<CategoryView> loadManagedCategories() {
-        ActorContext actor = requireCatalogManager();
+        ActorContext actor = requireCatalogOperator();
         return categoryRepository.findAllByTenant(actor.tenantId()).stream()
                 .sorted(Comparator.comparingInt(MenuCategory::displayOrder).thenComparing(MenuCategory::id))
                 .map(CatalogService::toView)
@@ -113,7 +112,7 @@ public class CatalogService implements CatalogQueryUseCase, CatalogCommandUseCas
     @Override
     @Transactional(readOnly = true)
     public List<ProductView> loadManagedProducts() {
-        ActorContext actor = requireCatalogManager();
+        ActorContext actor = requireCatalogOperator();
         return productRepository.findAllByTenant(actor.tenantId()).stream()
                 .sorted(Comparator.comparingInt(Product::displayOrder).thenComparing(Product::id))
                 .map(CatalogService::toView)
@@ -368,6 +367,21 @@ public class CatalogService implements CatalogQueryUseCase, CatalogCommandUseCas
                     CatalogErrorCode.CATALOG_VERSION_CONFLICT,
                     "다른 사용자가 먼저 변경했습니다. 최신 정보를 다시 불러온 뒤 저장하세요.");
         }
+    }
+
+    /**
+     * 운영 목록 조회 권한.
+     *
+     * <p>직원은 품절을 바꾸려면 품절·비활성 상품까지 볼 수 있어야 하므로 읽기는 허용한다.
+     * 변경 권한은 {@link #requireCatalogManager()}로 따로 검증하므로 STAFF는 여전히
+     * Category·상품·가격을 수정할 수 없다. Kiosk 기기는 판매 메뉴 밖의 목록을 볼 수 없다.
+     */
+    private ActorContext requireCatalogOperator() {
+        ActorContext actor = requireActor();
+        if (!actor.canChangeSoldOut()) {
+            throw forbidden();
+        }
+        return actor;
     }
 
     private ActorContext requireCatalogManager() {

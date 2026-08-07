@@ -1,6 +1,7 @@
 package com.dorosoft.erp.commerce.application.port.catalog;
 
 import com.dorosoft.erp.commerce.domain.catalog.MenuCategory;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +25,9 @@ public interface MenuCategoryRepositoryPort {
     List<MenuCategory> findAllByTenant(UUID tenantId);
 
     List<MenuCategory> findActiveByTenant(UUID tenantId);
+
+    /** 주문용 일괄 조회. 상품이 속한 Category의 활성 여부를 확인할 때 사용한다. */
+    List<MenuCategory> findAllByTenantAndIds(UUID tenantId, Collection<UUID> categoryIds);
 
     boolean existsByTenantAndNameExcludingId(UUID tenantId, String name, UUID excludedCategoryId);
 }

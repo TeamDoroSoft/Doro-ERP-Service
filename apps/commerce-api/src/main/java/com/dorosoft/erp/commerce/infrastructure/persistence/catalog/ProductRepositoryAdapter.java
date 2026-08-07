@@ -6,6 +6,7 @@ import com.dorosoft.erp.commerce.domain.catalog.Product;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -76,6 +77,16 @@ class ProductRepositoryAdapter implements ProductRepositoryPort {
     @Override
     public List<Product> findAllByTenant(UUID tenantId) {
         return repository.findByTenantIdOrderByDisplayOrderAscIdAsc(tenantId).stream()
+                .map(ProductRepositoryAdapter::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Product> findAllByTenantAndIds(UUID tenantId, Collection<UUID> productIds) {
+        if (tenantId == null || productIds == null || productIds.isEmpty()) {
+            return List.of();
+        }
+        return repository.findByTenantIdAndIdIn(tenantId, productIds).stream()
                 .map(ProductRepositoryAdapter::toDomain)
                 .toList();
     }

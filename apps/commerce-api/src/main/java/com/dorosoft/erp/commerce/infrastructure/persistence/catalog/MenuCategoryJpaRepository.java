@@ -1,6 +1,7 @@
 package com.dorosoft.erp.commerce.infrastructure.persistence.catalog;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,8 @@ import org.springframework.data.repository.query.Param;
 public interface MenuCategoryJpaRepository extends JpaRepository<MenuCategoryEntity, UUID> {
 
     Optional<MenuCategoryEntity> findByIdAndTenantId(UUID id, UUID tenantId);
+
+    List<MenuCategoryEntity> findByTenantIdAndIdIn(UUID tenantId, Collection<UUID> categoryIds);
 
     List<MenuCategoryEntity> findByTenantIdOrderByDisplayOrderAscIdAsc(UUID tenantId);
 

@@ -31,16 +31,19 @@ public final class CatalogViews {
             long version) {
     }
 
-    /** 판매 메뉴 항목. 비활성 Category·비활성 상품은 목록에 포함하지 않는다. */
+    /**
+     * 판매 메뉴 항목 (FR-CATALOG-004).
+     *
+     * <p>비활성 Category·비활성 상품·품절 상품은 애초에 목록에 포함되지 않으므로
+     * 판매 가능 여부를 나타내는 Flag를 따로 두지 않는다. 목록에 있으면 곧 판매 가능이다.
+     * 품절 상태를 함께 봐야 하는 직원 운영 화면은 관리용 조회 계약을 사용한다.
+     */
     public record SalesMenuItemView(
             UUID productId,
             String name,
             String description,
             long price,
-            boolean soldOut,
-            boolean sellable,
-            int displayOrder,
-            long version) {
+            int displayOrder) {
     }
 
     public record SalesMenuCategoryView(

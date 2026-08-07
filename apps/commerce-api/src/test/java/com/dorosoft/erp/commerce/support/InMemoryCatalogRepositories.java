@@ -5,6 +5,7 @@ import com.dorosoft.erp.commerce.application.port.catalog.ProductRepositoryPort;
 import com.dorosoft.erp.commerce.domain.catalog.CatalogStatus;
 import com.dorosoft.erp.commerce.domain.catalog.MenuCategory;
 import com.dorosoft.erp.commerce.domain.catalog.Product;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -71,6 +72,17 @@ public final class InMemoryCatalogRepositories {
             }
 
             @Override
+            public List<MenuCategory> findAllByTenantAndIds(UUID tenantId, Collection<UUID> categoryIds) {
+                if (categoryIds == null || categoryIds.isEmpty()) {
+                    return List.of();
+                }
+                return categories.values().stream()
+                        .filter(category -> category.belongsTo(tenantId))
+                        .filter(category -> categoryIds.contains(category.id()))
+                        .toList();
+            }
+
+            @Override
             public boolean existsByTenantAndNameExcludingId(UUID tenantId, String name, UUID excludedCategoryId) {
                 return categories.values().stream()
                         .filter(category -> category.belongsTo(tenantId))
@@ -124,13 +136,27 @@ public final class InMemoryCatalogRepositories {
             }
 
             @Override
+            public List<Product> findAllByTenantAndIds(UUID tenantId, Collection<UUID> productIds) {
+                if (productIds == null || productIds.isEmpty()) {
+                    return List.of();
+                }
+                return products.values().stream()
+                        .filter(product -> product.belongsTo(tenantId))
+                        .filter(product -> productIds.contains(product.id()))
+                        .toList();
+            }
+
+            /** 실제 JPQL과 같이 비활성 Category·비활성 상품·품절 상품을 모두 제외한다. */
+            @Override
             public List<Product> findSalesMenuProducts(UUID tenantId) {
                 return findAllByTenant(tenantId).stream()
-                        .filter(Product::isActive)
-                        .filter(product -> categories.values().stream()
-                                .anyMatch(category -> category.id().equals(product.categoryId())
-                                        && category.belongsTo(tenantId)
-                                        && category.isActive()))
+                        .filter(product -> !product.soldOut())
+                        .filter(product -> product.isSellableUnder(
+                                categories.values().stream()
+                                        .filter(category -> category.id().equals(product.categoryId()))
+                                        .filter(category -> category.belongsTo(tenantId))
+                                        .findFirst()
+                                        .orElse(null)))
                         .toList();
             }
 
@@ -163,6 +189,15 @@ public final class InMemoryCatalogRepositories {
                 UUID.randomUUID(), tenantId, categoryId, name, null, price, soldOut, status, 0, 0L);
         products.put(product.id(), product);
         return product;
+    }
+
+    /** 같은 Tenant에 같은 이름의 Category가 있으면 재사용하고 없으면 새로 만든다. */
+    public MenuCategory findOrSeedCategory(UUID tenantId, String name) {
+        return categories.values().stream()
+                .filter(category -> category.belongsTo(tenantId))
+                .filter(category -> category.name().equals(name))
+                .findFirst()
+                .orElseGet(() -> seedCategory(tenantId, name, 0, CatalogStatus.ACTIVE));
     }
 
     public MenuCategory category(UUID categoryId) {

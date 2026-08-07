@@ -27,6 +27,7 @@ spring:
       redis:
         namespace: ${STORE_ACCESS_SESSION_NAMESPACE:doro:store-access:session}
         repository-type: indexed
+        configure-action: none
 
 doro:
   identity:

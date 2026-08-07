@@ -4,12 +4,12 @@ import com.dorosoft.erp.storeaccess.application.api.identity.AuthProblemCode;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.EmployeeSessionAttributes;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +21,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
+import org.springframework.session.web.http.HttpSessionIdResolver;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -29,6 +30,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * never renews the Session's idle TTL (ADR-02-003: only genuine user activity, marked with
  * {@link UserActivity}, may do that — see {@link SessionIdleRenewalInterceptor}).
  *
+ * <p>Resolves the Session ID through the same {@link HttpSessionIdResolver} used to write it
+ * ({@link SpringSessionEstablisherAdapter}) rather than reading the Cookie value directly: the default
+ * {@code DefaultCookieSerializer} Base64-encodes the Cookie value, so a raw read would look up the wrong ID.
+ *
  * <p>Also enforces the 12-hour absolute expiration (ADR-02-003) and Fail-Closed behavior when Redis cannot
  * be reached while a Session cookie is present (ADR-02-002): a Client that believes it is authenticated must
  * never be let through as anonymous because Session state could not be checked.
@@ -36,26 +41,29 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class EmployeeSessionAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(EmployeeSessionAuthenticationFilter.class);
-    static final String SESSION_COOKIE_NAME = "SESSION";
     static final String RESOLVED_SESSION_REQUEST_ATTRIBUTE = "doro.identity.resolvedSession";
 
     private final Supplier<SessionRepository<? extends Session>> sessionRepositorySupplier;
+    private final HttpSessionIdResolver sessionIdResolver;
     private final ProblemResponseWriter problemResponseWriter;
     private final Clock clock;
 
     @Autowired
     public EmployeeSessionAuthenticationFilter(
             ObjectProvider<SessionRepository<? extends Session>> sessionRepositoryProvider,
+            HttpSessionIdResolver sessionIdResolver,
             ProblemResponseWriter problemResponseWriter,
             Clock clock) {
-        this(sessionRepositoryProvider::getObject, problemResponseWriter, clock);
+        this(sessionRepositoryProvider::getObject, sessionIdResolver, problemResponseWriter, clock);
     }
 
     EmployeeSessionAuthenticationFilter(
             Supplier<SessionRepository<? extends Session>> sessionRepositorySupplier,
+            HttpSessionIdResolver sessionIdResolver,
             ProblemResponseWriter problemResponseWriter,
             Clock clock) {
         this.sessionRepositorySupplier = sessionRepositorySupplier;
+        this.sessionIdResolver = sessionIdResolver;
         this.problemResponseWriter = problemResponseWriter;
         this.clock = clock;
     }
@@ -63,11 +71,12 @@ public class EmployeeSessionAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String sessionId = readSessionCookie(request);
-        if (sessionId == null) {
+        List<String> sessionIds = sessionIdResolver.resolveSessionIds(request);
+        if (sessionIds.isEmpty()) {
             filterChain.doFilter(request, response);
             return;
         }
+        String sessionId = sessionIds.get(0);
 
         Session session;
         try {
@@ -108,18 +117,5 @@ public class EmployeeSessionAuthenticationFilter extends OncePerRequestFilter {
         } finally {
             SecurityContextHolder.clearContext();
         }
-    }
-
-    private String readSessionCookie(HttpServletRequest request) {
-        Cookie[] cookies = request.getCookies();
-        if (cookies == null) {
-            return null;
-        }
-        for (Cookie cookie : cookies) {
-            if (SESSION_COOKIE_NAME.equals(cookie.getName()) && !cookie.getValue().isBlank()) {
-                return cookie.getValue();
-            }
-        }
-        return null;
     }
 }

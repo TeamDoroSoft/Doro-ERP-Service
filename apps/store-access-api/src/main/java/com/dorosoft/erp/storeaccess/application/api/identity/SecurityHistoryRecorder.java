@@ -9,6 +9,8 @@ import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryResult;
 import java.time.Clock;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Records the account/Kiosk-Credential-change Allowlist events (ADR-02-015). Callers invoke these from
@@ -17,9 +19,11 @@ import org.springframework.stereotype.Component;
  * idempotency-wrapped operations, only runs once per Idempotency-Key since it sits inside the guarded
  * operation, not before the claim.
  *
- * <p>Login/lockout/reauthentication/session-invalidation events are intentionally not covered here: those
- * flows don't exist yet (feature 02 steps 2/4 are blocked on feature 01), so their exact Actor/Target shape
- * is still undecided and will be added alongside those flows.
+ * <p>{@code recordLoginFailed}/{@code recordAccountLocked} are the exception: ADR-02-015 requires
+ * authentication-failure history to commit in its own short Transaction, separate from the caller's account
+ * update, so that a history-write problem never turns an already-decided login failure into a {@code 500}.
+ * They run with {@link Propagation#REQUIRES_NEW} and callers must catch and swallow (log-only) any exception
+ * from them rather than let it propagate.
  */
 @Component
 public class SecurityHistoryRecorder {
@@ -79,6 +83,24 @@ public class SecurityHistoryRecorder {
     public void recordKioskDeviceRevoked(UUID tenantId, UUID storeId, UUID actorEmployeeId, UUID kioskDeviceId) {
         record(tenantId, storeId, SecurityHistoryEventType.KIOSK_DEVICE_REVOKED, actorEmployeeId,
                 TARGET_TYPE_KIOSK_DEVICE, kioskDeviceId, null, null);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordLoginFailed(UUID tenantId, UUID storeId, UUID employeeId, String reasonCode) {
+        recordFailure(tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_LOGIN_FAILED, employeeId, reasonCode);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordAccountLocked(UUID tenantId, UUID storeId, UUID employeeId, String reasonCode) {
+        recordFailure(tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_ACCOUNT_LOCKED, employeeId, reasonCode);
+    }
+
+    private void recordFailure(
+            UUID tenantId, UUID storeId, SecurityHistoryEventType eventType, UUID employeeId, String reasonCode) {
+        EmployeeSecurityHistory history = EmployeeSecurityHistory.occur(
+                UUID.randomUUID(), tenantId, storeId, eventType, employeeId, TARGET_TYPE_EMPLOYEE, employeeId,
+                SecurityHistoryResult.FAILURE, reasonCode, null, null, clock.instant());
+        repository.save(history);
     }
 
     private void record(

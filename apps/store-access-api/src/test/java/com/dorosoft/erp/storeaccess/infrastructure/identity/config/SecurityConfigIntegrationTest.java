@@ -6,8 +6,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
-import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeePrincipal;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeeAuthenticationToken;
+import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeePrincipal;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.UserActivity;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.EmployeeSessionAttributes;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.SessionPrincipalIndexKey;
@@ -19,17 +19,19 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.context.annotation.Bean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 import org.springframework.session.data.redis.RedisIndexedSessionRepository;
+import org.springframework.session.web.http.HttpSessionIdResolver;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -94,6 +96,9 @@ class SecurityConfigIntegrationTest {
     private RedisIndexedSessionRepository sessionRepository;
 
     @Autowired
+    private HttpSessionIdResolver sessionIdResolver;
+
+    @Autowired
     private Clock clock;
 
     @Test
@@ -104,15 +109,17 @@ class SecurityConfigIntegrationTest {
 
     @Test
     void publicLoginPathIsNotBlockedBySecurity() throws Exception {
+        // No body: fails request validation (400), not Security (401) — proves permitAll, now that a real
+        // AuthController exists to validate against.
         mockMvc.perform(post("/api/v1/auth/login"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest());
     }
 
     @Test
     void requestWithAValidSessionCookieIsAuthenticated() throws Exception {
         RedisIndexedSessionRepository.RedisSession session = createAuthenticatedSession(Role.OWNER, clock.instant().plus(Duration.ofHours(12)));
 
-        mockMvc.perform(get("/api/v1/_test/passive").cookie(new Cookie("SESSION", session.getId())))
+        mockMvc.perform(get("/api/v1/_test/passive").cookie(sessionCookie(session.getId())))
                 .andExpect(status().isOk());
     }
 
@@ -121,7 +128,7 @@ class SecurityConfigIntegrationTest {
         RedisIndexedSessionRepository.RedisSession session =
                 createAuthenticatedSession(Role.OWNER, clock.instant().minus(Duration.ofSeconds(1)));
 
-        mockMvc.perform(get("/api/v1/_test/passive").cookie(new Cookie("SESSION", session.getId())))
+        mockMvc.perform(get("/api/v1/_test/passive").cookie(sessionCookie(session.getId())))
                 .andExpect(status().isUnauthorized());
 
         assertThat(sessionRepository.findById(session.getId())).isNull();
@@ -141,9 +148,9 @@ class SecurityConfigIntegrationTest {
         Instant originalPassiveLastAccessed = sessionRepository.findById(passiveSession.getId()).getLastAccessedTime();
         Thread.sleep(50);
 
-        mockMvc.perform(get("/api/v1/_test/user-activity").cookie(new Cookie("SESSION", activitySession.getId())))
+        mockMvc.perform(get("/api/v1/_test/user-activity").cookie(sessionCookie(activitySession.getId())))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/v1/_test/passive").cookie(new Cookie("SESSION", passiveSession.getId())))
+        mockMvc.perform(get("/api/v1/_test/passive").cookie(sessionCookie(passiveSession.getId())))
                 .andExpect(status().isOk());
 
         Session reloadedActivitySession = sessionRepository.findById(activitySession.getId());
@@ -156,6 +163,14 @@ class SecurityConfigIntegrationTest {
     void aRequestWithNoSessionCookieIsTreatedAsAnonymous() throws Exception {
         mockMvc.perform(get("/api/v1/_test/passive"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    /** Encodes a raw Session ID exactly as {@link HttpSessionIdResolver} would write it into a Cookie. */
+    private Cookie sessionCookie(String sessionId) {
+        MockHttpServletRequest mockRequest = new MockHttpServletRequest();
+        MockHttpServletResponse mockResponse = new MockHttpServletResponse();
+        sessionIdResolver.setSessionId(mockRequest, mockResponse, sessionId);
+        return mockResponse.getCookie("SESSION");
     }
 
     private RedisIndexedSessionRepository.RedisSession createAuthenticatedSession(Role role, Instant absoluteExpiresAt) {

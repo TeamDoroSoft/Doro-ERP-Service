@@ -5,7 +5,12 @@ import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeeSes
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.ProblemResponseWriter;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.SessionIdleRenewalInterceptor;
 import java.time.Clock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -17,6 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
+import org.springframework.session.web.http.HttpSessionIdResolver;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -26,9 +32,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * carries a valid employee Session, matching "Role과 Tenant Scope를 Application 계층에서도 재검증한다".
  *
  * <p>Session persistence is entirely custom ({@link EmployeeSessionAuthenticationFilter} /
- * {@link SessionIdleRenewalInterceptor}), so Spring Security's own context repository and session-fixation
- * machinery — both of which touch {@link jakarta.servlet.http.HttpServletRequest#getSession()} — are turned
- * off via {@code STATELESS} session creation policy and a disabled {@code securityContext()}.
+ * {@link SessionIdleRenewalInterceptor}), so Spring Security's own context repository and Request Cache are
+ * disabled. {@code sessionCreationPolicy(NEVER)} is used rather than {@code STATELESS}: STATELESS's own
+ * Session-management handling was found to silently invalidate the very Sessions this Config's Filter had
+ * just authenticated/renewed on the same request (reproduced by a Redis-backed Session vanishing immediately
+ * after a successful, authenticated response) — NEVER avoids that without reintroducing any Spring
+ * Security-managed Session creation.
  */
 @Configuration
 public class SecurityConfig {
@@ -41,12 +50,60 @@ public class SecurityConfig {
             "/api/v1/auth/login", "/api/v1/kiosk-auth/activate"
     };
 
+    /**
+     * Spring Session auto-registers two beans that back {@code HttpServletRequest#getSession()} with this
+     * same Redis store: {@code springSessionRepositoryFilter} (the {@code SessionRepositoryFilter} itself,
+     * from Spring Session core) and Spring Boot's {@code sessionRepositoryFilterRegistration} (a
+     * {@code DelegatingFilterProxyRegistrationBean} wrapping it for the Servlet container) — neither has a
+     * config property or {@code @ConditionalOnMissingBean} escape hatch, and Filter-discovery infrastructure
+     * (confirmed with MockMvc) can pick up the Filter bean directly, bypassing the registration wrapper
+     * entirely, so both must be removed. Left in place, the moment anything elsewhere in the Servlet/MVC
+     * stack calls {@code getSession()}, it silently touches/renews the Session's {@code lastAccessedTime} —
+     * exactly the "any access extends idle timeout" behavior ADR-02-003 requires NOT happen outside Endpoints
+     * explicitly marked {@link com.dorosoft.erp.storeaccess.infrastructure.identity.security.UserActivity}
+     * (confirmed by reproducing a passive request's Session gaining a fresh {@code lastAccessedTime} it
+     * should not have). Removing both bean definitions by name — as a {@code static}
+     * {@link BeanFactoryPostProcessor} bean method, so it runs before either definition is processed — is the
+     * only available way to stop this.
+     */
+    @Bean
+    static BeanFactoryPostProcessor removeAutoSessionRepositoryFilterRegistration() {
+        return beanFactory -> {
+            Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+            for (String beanName : new String[] {"sessionRepositoryFilterRegistration", "springSessionRepositoryFilter"}) {
+                if (beanFactory instanceof BeanDefinitionRegistry registry && registry.containsBeanDefinition(beanName)) {
+                    registry.removeBeanDefinition(beanName);
+                    log.info("Removed Spring Boot's auto-registered {} to keep employee Session idle renewal opt-in", beanName);
+                }
+            }
+        };
+    }
+
     @Bean
     public EmployeeSessionAuthenticationFilter employeeSessionAuthenticationFilter(
             ObjectProvider<SessionRepository<? extends Session>> sessionRepositoryProvider,
+            HttpSessionIdResolver sessionIdResolver,
             ProblemResponseWriter problemResponseWriter,
             Clock clock) {
-        return new EmployeeSessionAuthenticationFilter(sessionRepositoryProvider, problemResponseWriter, clock);
+        return new EmployeeSessionAuthenticationFilter(
+                sessionRepositoryProvider, sessionIdResolver, problemResponseWriter, clock);
+    }
+
+    /**
+     * Any {@code Filter}-typed {@code @Bean} is, by default, ALSO auto-registered by Spring Boot as its own
+     * standalone Servlet Filter — entirely separate from {@code .addFilterBefore(employeeSessionAuthenticationFilter, ...)}
+     * below, which wires the SAME bean into the Security chain. That standalone registration runs at a
+     * different position (outside {@code springSecurityFilterChain}), so this Filter's own
+     * {@code OncePerRequestFilter} guard does not reliably prevent it from resolving/touching the Session a
+     * second time. Disabling the auto-registration (the standard Spring Security + Boot pattern for Filter
+     * beans meant only for {@code HttpSecurity}) leaves the {@code .addFilterBefore} wiring as the only path.
+     */
+    @Bean
+    public FilterRegistrationBean<EmployeeSessionAuthenticationFilter> employeeSessionAuthenticationFilterRegistration(
+            EmployeeSessionAuthenticationFilter filter) {
+        FilterRegistrationBean<EmployeeSessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -72,7 +129,8 @@ public class SecurityConfig {
             ProblemResponseWriter problemResponseWriter) throws Exception {
         http
                 .securityContext(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.NEVER))
+                .requestCache(cache -> cache.disable())
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .ignoringRequestMatchers(PUBLIC_POST_ENDPOINTS))

@@ -3,10 +3,24 @@ spring:
     name: audit-api
   config:
     import: optional:file:.env[.properties]
+  mongodb:
+    uri: ${AUDIT_MONGODB_URI:mongodb://localhost:27017/audit}
   data:
     mongodb:
-      uri: ${AUDIT_MONGODB_URI:mongodb://localhost:27017/audit}
       auto-index-creation: false
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:ap-northeast-2}
+
+audit:
+  retention:
+    days: ${AUDIT_RETENTION_DAYS:90}
+  sqs:
+    queue-name: ${AUDIT_SQS_QUEUE_NAME:audit-events.fifo}
+    poll-timeout: ${AUDIT_SQS_POLL_TIMEOUT:10s}
+    max-messages-per-poll: ${AUDIT_SQS_MAX_MESSAGES_PER_POLL:10}
+    max-concurrent-messages: ${AUDIT_SQS_MAX_CONCURRENT_MESSAGES:10}
 
 server:
   port: ${AUDIT_PORT:8085}

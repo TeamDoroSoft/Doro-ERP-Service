@@ -114,6 +114,30 @@ class ServiceBoundaryTest {
     }
 
     @Test
+    void auditMessageListenerMustUseApplicationApiInsteadOfPersistencePortsOrAdapters() {
+        noClasses()
+                .that().resideInAPackage("com.dorosoft.erp.audit.presentation.messaging..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "com.dorosoft.erp.audit.application.port..",
+                        "com.dorosoft.erp.audit.infrastructure..",
+                        "org.springframework.data.mongodb..")
+                .allowEmptyShould(false)
+                .check(productionClasses());
+    }
+
+    @Test
+    void auditApplicationMustNotDependOnMongoOrAwsFrameworkTypes() {
+        noClasses()
+                .that().resideInAPackage("com.dorosoft.erp.audit.application..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework.data.mongodb..",
+                        "io.awspring.cloud..",
+                        "software.amazon.awssdk..")
+                .allowEmptyShould(false)
+                .check(productionClasses());
+    }
+
+    @Test
     void legacyMonolithPackagesMustNotRemain() {
         JavaClasses classes = productionClasses();
 

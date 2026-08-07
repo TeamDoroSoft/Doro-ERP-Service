@@ -9,6 +9,9 @@ dependencies {
     implementation(project(":platform:observability"))
     implementation(project(":platform:messaging-contract"))
 
+    implementation(platform("io.awspring.cloud:spring-cloud-aws-dependencies:4.0.2"))
+    implementation("io.awspring.cloud:spring-cloud-aws-starter-sqs")
+
     implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
@@ -16,6 +19,7 @@ dependencies {
 
     testImplementation(project(":test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.testcontainers:testcontainers-localstack")
 }
 
 tasks.named<BootBuildImage>("bootBuildImage") {

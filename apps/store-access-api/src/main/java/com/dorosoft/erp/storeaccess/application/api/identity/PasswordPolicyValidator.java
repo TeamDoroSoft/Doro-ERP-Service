@@ -48,6 +48,10 @@ public class PasswordPolicyValidator {
      * only inside the guarded operation itself — reuse-checking reads the account's current password hash,
      * which the operation's own first successful run changes, so checking it before the claim would reject
      * a legitimate replay of an already-completed request.
+     *
+     * <p>{@code candidatePassword} must already be {@link #normalize(String) normalized}: callers normalize
+     * once at the entry point and use that same value for every subsequent validation, Hash and comparison,
+     * so validation never runs against a different string than what is ultimately persisted (ADR-02-009).
      */
     public void validate(String candidatePassword, LoginId loginId, String currentPasswordHash) {
         validateFormat(candidatePassword, loginId);
@@ -56,9 +60,14 @@ public class PasswordPolicyValidator {
         }
     }
 
+    /** NFC-normalizes a raw password; callers use the returned value for validation, Hash and comparison alike. */
+    public static String normalize(String rawPassword) {
+        return Normalizer.normalize(rawPassword, Normalizer.Form.NFC);
+    }
+
     /** The stateless subset of the policy: length, blocklist membership, and derived-term rejection. */
     public void validateFormat(String candidatePassword, LoginId loginId) {
-        String normalized = Normalizer.normalize(candidatePassword, Normalizer.Form.NFC);
+        String normalized = normalize(candidatePassword);
         int length = normalized.codePointCount(0, normalized.length());
         if (length < MIN_LENGTH || length > MAX_LENGTH) {
             throw weakPassword();

@@ -66,15 +66,16 @@ public class EmployeeManagementService {
     public EmployeeIdentitySnapshot createEmployeeIdempotently(
             ActorContext actor, String idempotencyKey, LoginId loginId, String temporaryPasswordRaw, Role targetRole) {
         requireCanManage(actor, targetRole);
-        passwordPolicyValidator.validate(temporaryPasswordRaw, loginId, null);
+        String temporaryPassword = PasswordPolicyValidator.normalize(temporaryPasswordRaw);
+        passwordPolicyValidator.validate(temporaryPassword, loginId, null);
         String canonicalRequest = canonicalRequest(
-                actor, CREATE_EMPLOYEE_OPERATION, loginId.value(), targetRole.name(), temporaryPasswordRaw);
+                actor, CREATE_EMPLOYEE_OPERATION, loginId.value(), targetRole.name(), temporaryPassword);
 
         return idempotencyService.execute(
                 actor.tenantId(), actor.employeeId(), CREATE_EMPLOYEE_OPERATION, idempotencyKey, canonicalRequest,
                 EmployeeIdentitySnapshot::serialize, EmployeeIdentitySnapshot::deserialize,
                 () -> {
-                    String hash = passwordEncoder.encode(temporaryPasswordRaw);
+                    String hash = passwordEncoder.encode(temporaryPassword);
                     EmployeeAccount created = EmployeeAccount.createWithTemporaryPassword(
                             UUID.randomUUID(), actor.tenantId(), actor.storeId(), loginId, hash, targetRole,
                             clock.instant());
@@ -124,16 +125,17 @@ public class EmployeeManagementService {
             ActorContext actor, String idempotencyKey, UUID targetEmployeeId, String newTemporaryPasswordRaw) {
         EmployeeAccount target = requireManageableTarget(actor, targetEmployeeId);
         requireCanManage(actor, target.role());
-        passwordPolicyValidator.validateFormat(newTemporaryPasswordRaw, target.loginId());
+        String newTemporaryPassword = PasswordPolicyValidator.normalize(newTemporaryPasswordRaw);
+        passwordPolicyValidator.validateFormat(newTemporaryPassword, target.loginId());
         String canonicalRequest = canonicalRequest(
-                actor, RESET_PASSWORD_OPERATION, targetEmployeeId.toString(), newTemporaryPasswordRaw);
+                actor, RESET_PASSWORD_OPERATION, targetEmployeeId.toString(), newTemporaryPassword);
 
         return idempotencyService.execute(
                 actor.tenantId(), actor.employeeId(), RESET_PASSWORD_OPERATION, idempotencyKey, canonicalRequest,
                 EmployeeIdentitySnapshot::serialize, EmployeeIdentitySnapshot::deserialize,
                 () -> {
-                    passwordPolicyValidator.validateNotReusingCurrent(newTemporaryPasswordRaw, target.passwordHash());
-                    String hash = passwordEncoder.encode(newTemporaryPasswordRaw);
+                    passwordPolicyValidator.validateNotReusingCurrent(newTemporaryPassword, target.passwordHash());
+                    String hash = passwordEncoder.encode(newTemporaryPassword);
                     EmployeeAccount updated = employeeAccountRepository.save(target.resetPassword(hash, clock.instant()));
                     securityHistoryRecorder.recordPasswordReset(
                             actor.tenantId(), actor.storeId(), actor.employeeId(), target.id());
@@ -148,12 +150,14 @@ public class EmployeeManagementService {
                 .filter(account -> account.tenantId().equals(actor.tenantId()))
                 .orElseThrow(() -> new ProblemAwareException(
                         EmployeeManagementProblemCode.EMPLOYEE_NOT_FOUND, "직원을 찾을 수 없습니다."));
-        if (!passwordEncoder.matches(currentPasswordRaw, self.passwordHash())) {
+        String currentPassword = PasswordPolicyValidator.normalize(currentPasswordRaw);
+        if (!passwordEncoder.matches(currentPassword, self.passwordHash())) {
             throw new ProblemAwareException(
                     PasswordManagementProblemCode.CURRENT_PASSWORD_INCORRECT, "현재 비밀번호가 일치하지 않습니다.");
         }
-        passwordPolicyValidator.validate(newPasswordRaw, self.loginId(), self.passwordHash());
-        String hash = passwordEncoder.encode(newPasswordRaw);
+        String newPassword = PasswordPolicyValidator.normalize(newPasswordRaw);
+        passwordPolicyValidator.validate(newPassword, self.loginId(), self.passwordHash());
+        String hash = passwordEncoder.encode(newPassword);
         EmployeeAccount saved = employeeAccountRepository.save(self.changePassword(hash, clock.instant()));
         securityHistoryRecorder.recordPasswordChanged(actor.tenantId(), actor.storeId(), actor.employeeId());
         return saved;

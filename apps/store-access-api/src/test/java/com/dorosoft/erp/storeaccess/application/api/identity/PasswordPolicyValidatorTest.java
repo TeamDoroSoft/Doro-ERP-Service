@@ -8,6 +8,7 @@ import com.dorosoft.erp.platform.web.ProblemAwareException;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.config.IdentityInfrastructureConfig;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.config.IdentityPasswordProperties;
+import java.text.Normalizer;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -85,6 +86,15 @@ class PasswordPolicyValidatorTest {
     @Test
     void nullCurrentPasswordHashSkipsTheReuseCheck() {
         validator.validate("brand-new-employee-passphrase", loginId, null);
+    }
+
+    @Test
+    void normalizeProducesTheSameResultForDecomposedAndPrecomposedForms() {
+        String precomposed = "café-mystère-passphrase-99";
+        String decomposed = Normalizer.normalize(precomposed, Normalizer.Form.NFD);
+        assertThat(decomposed).isNotEqualTo(precomposed);
+
+        assertThat(PasswordPolicyValidator.normalize(decomposed)).isEqualTo(PasswordPolicyValidator.normalize(precomposed));
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.dorosoft.erp.storeaccess.domain.identity.EmployeeStatus;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
 import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryEventType;
+import java.text.Normalizer;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -368,6 +369,33 @@ class EmployeeManagementServiceIntegrationTest {
                 .asInstanceOf(type(ProblemAwareException.class))
                 .extracting(ProblemAwareException::code)
                 .isEqualTo(PasswordManagementProblemCode.PASSWORD_REUSE_NOT_ALLOWED);
+    }
+
+    /**
+     * ADR-02-009 requires the whole password pipeline to NFC-normalize once and use that same value for
+     * validation, Hashing and comparison. Regression for a bug where {@code changeOwnPassword} hashed/matched
+     * against the raw input while only validating the normalized form: a password submitted with a
+     * differently-composed (but visually identical) Unicode representation than the one originally hashed
+     * would then incorrectly fail the current-password check.
+     */
+    @Test
+    void changeOwnPasswordMatchesRegardlessOfUnicodeNormalizationForm() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        LoginId loginId = freshLoginId();
+        String precomposedPassword = "café-relaxed-passphrase-01";
+        String decomposedPassword = Normalizer.normalize(precomposedPassword, Normalizer.Form.NFD);
+        assertThat(decomposedPassword).isNotEqualTo(precomposedPassword);
+
+        EmployeeIdentitySnapshot created = service.createEmployeeIdempotently(
+                owner, UUID.randomUUID().toString(), loginId, precomposedPassword, Role.STAFF);
+        ActorContext staff = new ActorContext(tenantId, storeId, created.employeeId(), Role.STAFF);
+
+        EmployeeAccount changed = service.changeOwnPassword(
+                staff, decomposedPassword, "a-brand-new-passphrase-value-77");
+
+        assertThat(passwordEncoder.matches("a-brand-new-passphrase-value-77", changed.passwordHash())).isTrue();
     }
 
     @Test

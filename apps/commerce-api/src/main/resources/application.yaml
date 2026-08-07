@@ -18,6 +18,15 @@ server:
   port: ${COMMERCE_PORT:8082}
   shutdown: graceful
 
+doro:
+  commerce:
+    actor-context:
+      # Edge 또는 Store Access가 전달한 Actor Context의 서비스 자격증명 서명을 검증한다.
+      # 검증을 켠 상태에서 secret이 비어 있으면 기동 단계에서 Fail-Closed한다.
+      signature-required: ${COMMERCE_ACTOR_CONTEXT_SIGNATURE_REQUIRED:true}
+      secret: ${COMMERCE_ACTOR_CONTEXT_SECRET:}
+      max-age: ${COMMERCE_ACTOR_CONTEXT_MAX_AGE:PT5M}
+
 management:
   endpoints:
     web:

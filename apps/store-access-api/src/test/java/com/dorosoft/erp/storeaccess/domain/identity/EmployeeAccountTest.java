@@ -51,4 +51,109 @@ class EmployeeAccountTest {
                 "argon2-hash", Role.OWNER, EmployeeStatus.ACTIVE, false, null, 0, null, -1, null, null, 0L, now, now))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void recordFailedLoginIncrementsCountWithoutLockingBelowThreshold() {
+        EmployeeAccount account = activeAccount();
+
+        for (int i = 1; i <= 4; i++) {
+            account = account.recordFailedLogin(now.plusSeconds(i));
+        }
+
+        assertThat(account.failedLoginCount()).isEqualTo(4);
+        assertThat(account.lockoutLevel()).isZero();
+        assertThat(account.lockedUntil()).isNull();
+        assertThat(account.isLocked(now.plusSeconds(4))).isFalse();
+    }
+
+    @Test
+    void fifthFailureWithinObservationWindowLocksForOneMinute() {
+        EmployeeAccount account = activeAccount();
+        Instant fifthFailureAt = now.plusSeconds(5);
+
+        for (int i = 1; i <= 5; i++) {
+            account = account.recordFailedLogin(now.plusSeconds(i));
+        }
+
+        assertThat(account.failedLoginCount()).isEqualTo(5);
+        assertThat(account.lockoutLevel()).isEqualTo(1);
+        assertThat(account.lockedUntil()).isEqualTo(fifthFailureAt.plus(Duration.ofMinutes(1)));
+        assertThat(account.isLocked(fifthFailureAt)).isTrue();
+        assertThat(account.isLocked(fifthFailureAt.plus(Duration.ofMinutes(1)))).isFalse();
+    }
+
+    @Test
+    void failedLoginWhileLockedIsANoOp() {
+        EmployeeAccount locked = lockedAtLevelOne();
+
+        EmployeeAccount unchanged = locked.recordFailedLogin(locked.lockedUntil().minusSeconds(1));
+
+        assertThat(unchanged).isEqualTo(locked);
+    }
+
+    @Test
+    void failureAfterLockExpiresEscalatesToNextLevel() {
+        EmployeeAccount locked = lockedAtLevelOne();
+        Instant nextFailureAt = locked.lockedUntil().plusSeconds(1);
+
+        EmployeeAccount escalated = locked.recordFailedLogin(nextFailureAt);
+
+        assertThat(escalated.lockoutLevel()).isEqualTo(2);
+        assertThat(escalated.lockedUntil()).isEqualTo(nextFailureAt.plus(Duration.ofMinutes(2)));
+    }
+
+    @Test
+    void lockoutDurationCapsAtFifteenMinutesFromLevelFiveOnward() {
+        // Fails exactly at the moment each lock expires, the tightest gap for which recordFailedLogin still
+        // treats the account as unlocked (isLocked uses a strict "before") and within the 15-minute
+        // observation window (the window check is strictly-greater-than 15 minutes).
+        EmployeeAccount account = lockedAtLevelOne();
+        int[] expectedMinutesByLevel = {2, 4, 8, 15, 15};
+
+        for (int expectedMinutes : expectedMinutesByLevel) {
+            Instant nextFailureAt = account.lockedUntil();
+            account = account.recordFailedLogin(nextFailureAt);
+            assertThat(account.lockedUntil()).isEqualTo(nextFailureAt.plus(Duration.ofMinutes(expectedMinutes)));
+        }
+        assertThat(account.lockoutLevel()).isEqualTo(5);
+    }
+
+    @Test
+    void failureAfterObservationWindowExpiresResetsCountAndLevel() {
+        EmployeeAccount locked = lockedAtLevelOne();
+        Instant longAfterLastFailure = locked.lastFailedAt().plus(Duration.ofMinutes(16));
+
+        EmployeeAccount reset = locked.recordFailedLogin(longAfterLastFailure);
+
+        assertThat(reset.failedLoginCount()).isEqualTo(1);
+        assertThat(reset.lockoutLevel()).isZero();
+        assertThat(reset.lockedUntil()).isNull();
+    }
+
+    @Test
+    void recordSuccessfulLoginResetsLockoutStateAndRefreshesLastAuthenticatedAt() {
+        EmployeeAccount locked = lockedAtLevelOne();
+        Instant loginAt = locked.lockedUntil().plusSeconds(1);
+
+        EmployeeAccount succeeded = locked.recordSuccessfulLogin(loginAt);
+
+        assertThat(succeeded.failedLoginCount()).isZero();
+        assertThat(succeeded.lockoutLevel()).isZero();
+        assertThat(succeeded.lockedUntil()).isNull();
+        assertThat(succeeded.lastPasswordAuthenticatedAt()).isEqualTo(loginAt);
+    }
+
+    private EmployeeAccount activeAccount() {
+        return EmployeeAccount.createWithTemporaryPassword(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                new LoginId("owner01"), "argon2-hash", Role.OWNER, now);
+    }
+
+    private EmployeeAccount lockedAtLevelOne() {
+        EmployeeAccount account = activeAccount();
+        for (int i = 1; i <= 5; i++) {
+            account = account.recordFailedLogin(now.plusSeconds(i));
+        }
+        return account;
+    }
 }

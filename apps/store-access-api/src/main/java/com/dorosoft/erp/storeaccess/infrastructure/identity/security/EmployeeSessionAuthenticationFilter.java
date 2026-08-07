@@ -1,6 +1,7 @@
 package com.dorosoft.erp.storeaccess.infrastructure.identity.security;
 
 import com.dorosoft.erp.storeaccess.application.api.identity.AuthProblemCode;
+import com.dorosoft.erp.storeaccess.application.api.identity.UserActivity;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.EmployeeSessionAttributes;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

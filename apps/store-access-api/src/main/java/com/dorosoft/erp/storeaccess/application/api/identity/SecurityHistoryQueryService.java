@@ -5,6 +5,8 @@ import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSecurityHi
 import com.dorosoft.erp.storeaccess.application.port.identity.SecurityHistoryQuery;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeSecurityHistory;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryEventType;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryResult;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -44,6 +46,52 @@ public class SecurityHistoryQueryService {
                 request.targetId(), request.result(), request.cursorOccurredAt(), request.cursorId(), size,
                 restrictToActorId);
         return repository.search(query);
+    }
+
+    /**
+     * Controller-facing overload: {@code eventType}/{@code result} arrive as raw query-parameter Strings
+     * (the presentation layer may not reference domain enum types) and are parsed here.
+     */
+    @Transactional(readOnly = true)
+    public List<SecurityHistoryEntry> searchForController(
+            ActorContext actor,
+            Instant from,
+            Instant to,
+            String eventTypeRaw,
+            String targetType,
+            UUID targetId,
+            String resultRaw,
+            Instant cursorOccurredAt,
+            UUID cursorId,
+            Integer size) {
+        SecurityHistorySearchRequest request = new SecurityHistorySearchRequest(
+                from, to, parseEventType(eventTypeRaw), targetType, targetId, parseResult(resultRaw),
+                cursorOccurredAt, cursorId, size);
+        return search(actor, request).stream().map(SecurityHistoryEntry::from).toList();
+    }
+
+    private SecurityHistoryEventType parseEventType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return SecurityHistoryEventType.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            throw new ProblemAwareException(
+                    SecurityHistoryProblemCode.INVALID_SECURITY_HISTORY_FILTER, "이벤트 유형이 올바르지 않습니다.");
+        }
+    }
+
+    private SecurityHistoryResult parseResult(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return SecurityHistoryResult.valueOf(raw);
+        } catch (IllegalArgumentException e) {
+            throw new ProblemAwareException(
+                    SecurityHistoryProblemCode.INVALID_SECURITY_HISTORY_FILTER, "결과 값이 올바르지 않습니다.");
+        }
     }
 
     private void requireCanQuery(ActorContext actor) {

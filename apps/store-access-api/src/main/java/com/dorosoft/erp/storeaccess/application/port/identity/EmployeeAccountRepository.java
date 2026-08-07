@@ -12,6 +12,8 @@ public interface EmployeeAccountRepository {
 
     Optional<EmployeeAccount> findByTenantIdAndLoginId(UUID tenantId, LoginId loginId);
 
+    List<EmployeeAccount> findByTenantId(UUID tenantId);
+
     EmployeeAccount save(EmployeeAccount account);
 
     /**

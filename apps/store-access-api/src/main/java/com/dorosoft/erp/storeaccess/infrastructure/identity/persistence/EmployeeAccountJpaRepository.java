@@ -13,6 +13,8 @@ interface EmployeeAccountJpaRepository extends JpaRepository<EmployeeAccountEnti
 
     Optional<EmployeeAccountEntity> findByTenantIdAndLoginId(UUID tenantId, String loginId);
 
+    List<EmployeeAccountEntity> findByTenantIdOrderByCreatedAtAsc(UUID tenantId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM EmployeeAccountEntity e "
             + "WHERE e.tenantId = :tenantId "

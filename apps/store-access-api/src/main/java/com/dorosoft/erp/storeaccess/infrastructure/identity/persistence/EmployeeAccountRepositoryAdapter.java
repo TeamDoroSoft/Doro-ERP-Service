@@ -39,4 +39,11 @@ class EmployeeAccountRepositoryAdapter implements EmployeeAccountRepository {
                 .map(EmployeeAccountEntity::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<EmployeeAccount> findByTenantId(UUID tenantId) {
+        return jpaRepository.findByTenantIdOrderByCreatedAtAsc(tenantId).stream()
+                .map(EmployeeAccountEntity::toDomain)
+                .toList();
+    }
 }

@@ -2,6 +2,7 @@ package com.dorosoft.erp.storeaccess.application.api.identity;
 
 import com.dorosoft.erp.platform.web.ProblemAwareException;
 import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeAccountRepository;
+import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSessionRevoker;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeAccount;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeStatus;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
@@ -13,6 +14,8 @@ import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Employee creation, Role/status management and password administration, including the OWNER/MANAGER
@@ -31,6 +34,7 @@ public class EmployeeManagementService {
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final IdempotencyService idempotencyService;
     private final SecurityHistoryRecorder securityHistoryRecorder;
+    private final EmployeeSessionRevoker employeeSessionRevoker;
     private final Clock clock;
 
     public EmployeeManagementService(
@@ -39,12 +43,14 @@ public class EmployeeManagementService {
             PasswordPolicyValidator passwordPolicyValidator,
             IdempotencyService idempotencyService,
             SecurityHistoryRecorder securityHistoryRecorder,
+            EmployeeSessionRevoker employeeSessionRevoker,
             Clock clock) {
         this.employeeAccountRepository = employeeAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicyValidator = passwordPolicyValidator;
         this.idempotencyService = idempotencyService;
         this.securityHistoryRecorder = securityHistoryRecorder;
+        this.employeeSessionRevoker = employeeSessionRevoker;
         this.clock = clock;
     }
 
@@ -86,6 +92,48 @@ public class EmployeeManagementService {
                 });
     }
 
+    /** Controller-facing overload: {@code newRoleRaw} must already be validated against the Role enum names
+     * (e.g. via a {@code @Pattern}-constrained Request DTO) since Controllers may not reference {@link Role}. */
+    @Transactional
+    public EmployeeSummary createEmployeeIdempotently(
+            ActorContext actor, String idempotencyKey, String loginIdRaw, String temporaryPasswordRaw, String targetRoleRaw) {
+        LoginId loginId = parseLoginId(loginIdRaw);
+        EmployeeIdentitySnapshot snapshot = createEmployeeIdempotently(
+                actor, idempotencyKey, loginId, temporaryPasswordRaw, Role.valueOf(targetRoleRaw));
+        EmployeeAccount created = employeeAccountRepository.findById(snapshot.employeeId())
+                .orElseThrow(() -> new ProblemAwareException(
+                        EmployeeManagementProblemCode.EMPLOYEE_NOT_FOUND, "직원을 찾을 수 없습니다."));
+        return EmployeeSummary.from(created);
+    }
+
+    public List<EmployeeSummary> listEmployees(ActorContext actor) {
+        requireCanView(actor);
+        return employeeAccountRepository.findByTenantId(actor.tenantId()).stream()
+                .filter(account -> actor.role() == Role.OWNER
+                        || account.role() == Role.STAFF
+                        || account.id().equals(actor.employeeId()))
+                .map(EmployeeSummary::from)
+                .toList();
+    }
+
+    public EmployeeSummary getEmployee(ActorContext actor, UUID targetEmployeeId) {
+        requireCanView(actor);
+        EmployeeAccount target = employeeAccountRepository.findById(targetEmployeeId)
+                .filter(candidate -> candidate.tenantId().equals(actor.tenantId()))
+                .orElseThrow(() -> new ProblemAwareException(
+                        EmployeeManagementProblemCode.EMPLOYEE_NOT_FOUND, "직원을 찾을 수 없습니다."));
+        if (!target.id().equals(actor.employeeId())) {
+            requireCanManage(actor, target.role());
+        }
+        return EmployeeSummary.from(target);
+    }
+
+    /** Controller-facing overload: {@code newRoleRaw} must already be validated against the Role enum names. */
+    @Transactional
+    public EmployeeSummary changeRole(ActorContext actor, UUID targetEmployeeId, String newRoleRaw) {
+        return EmployeeSummary.from(changeRole(actor, targetEmployeeId, Role.valueOf(newRoleRaw)));
+    }
+
     @Transactional
     public EmployeeAccount changeRole(ActorContext actor, UUID targetEmployeeId, Role newRole) {
         EmployeeAccount target = requireManageableTarget(actor, targetEmployeeId);
@@ -97,7 +145,15 @@ public class EmployeeManagementService {
         EmployeeAccount saved = employeeAccountRepository.save(target.changeRole(newRole, clock.instant()));
         securityHistoryRecorder.recordRoleChanged(
                 actor.tenantId(), actor.storeId(), actor.employeeId(), target.id(), target.role(), newRole);
+        revokeSessionsAfterCommit(actor.tenantId(), target.id());
         return saved;
+    }
+
+    /** Controller-facing overload: {@code newStatusRaw} must already be validated against the EmployeeStatus
+     * enum names. */
+    @Transactional
+    public EmployeeSummary changeStatus(ActorContext actor, UUID targetEmployeeId, String newStatusRaw) {
+        return EmployeeSummary.from(changeStatus(actor, targetEmployeeId, EmployeeStatus.valueOf(newStatusRaw)));
     }
 
     @Transactional
@@ -112,6 +168,7 @@ public class EmployeeManagementService {
         EmployeeAccount saved = employeeAccountRepository.save(target.changeStatus(newStatus, clock.instant()));
         securityHistoryRecorder.recordStatusChanged(
                 actor.tenantId(), actor.storeId(), actor.employeeId(), target.id(), target.status(), newStatus);
+        revokeSessionsAfterCommit(actor.tenantId(), target.id());
         return saved;
     }
 
@@ -139,8 +196,16 @@ public class EmployeeManagementService {
                     EmployeeAccount updated = employeeAccountRepository.save(target.resetPassword(hash, clock.instant()));
                     securityHistoryRecorder.recordPasswordReset(
                             actor.tenantId(), actor.storeId(), actor.employeeId(), target.id());
+                    revokeSessionsAfterCommit(actor.tenantId(), target.id());
                     return EmployeeIdentitySnapshot.from(updated);
                 });
+    }
+
+    /** Controller-facing overload of {@link #changeOwnPassword(ActorContext, String, String)}. */
+    @Transactional
+    public EmployeeSummary changeOwnPasswordForController(
+            ActorContext actor, String currentPasswordRaw, String newPasswordRaw) {
+        return EmployeeSummary.from(changeOwnPassword(actor, currentPasswordRaw, newPasswordRaw));
     }
 
     /** Self-service password change (ADR-02-009): not idempotency-wrapped — only creation and admin reset are. */
@@ -160,6 +225,7 @@ public class EmployeeManagementService {
         String hash = passwordEncoder.encode(newPassword);
         EmployeeAccount saved = employeeAccountRepository.save(self.changePassword(hash, clock.instant()));
         securityHistoryRecorder.recordPasswordChanged(actor.tenantId(), actor.storeId(), actor.employeeId());
+        revokeSessionsAfterCommit(actor.tenantId(), actor.employeeId());
         return saved;
     }
 
@@ -192,6 +258,23 @@ public class EmployeeManagementService {
         }
     }
 
+    /** STAFF may not use any employee-management/query feature (기능 명세 §2). */
+    private void requireCanView(ActorContext actor) {
+        if (actor.role() == Role.STAFF) {
+            throw new ProblemAwareException(
+                    EmployeeManagementProblemCode.EMPLOYEE_MANAGEMENT_FORBIDDEN, "직원 조회 권한이 없습니다.");
+        }
+    }
+
+    private LoginId parseLoginId(String rawLoginId) {
+        try {
+            return LoginId.normalize(rawLoginId);
+        } catch (IllegalArgumentException e) {
+            throw new ProblemAwareException(
+                    EmployeeManagementProblemCode.INVALID_LOGIN_ID, "로그인 ID 형식이 올바르지 않습니다.");
+        }
+    }
+
     private void requireNotLastActiveOwner(UUID tenantId, EmployeeAccount target) {
         List<EmployeeAccount> activeOwners = employeeAccountRepository.findActiveOwnersForUpdate(tenantId);
         boolean isLastActiveOwner = activeOwners.size() <= 1
@@ -200,6 +283,26 @@ public class EmployeeManagementService {
             throw new ProblemAwareException(
                     EmployeeManagementProblemCode.LAST_ACTIVE_OWNER_REQUIRED, "마지막 활성 OWNER는 변경할 수 없습니다.");
         }
+    }
+
+    /**
+     * ADR-02-002/004: Redis Session deletion must happen only after the PostgreSQL Transaction that changed
+     * Role/status/Credentials has actually committed, and a deletion failure must never roll that change
+     * back. Deferring via {@link TransactionSynchronization#afterCommit()} — rather than calling
+     * {@link EmployeeSessionRevoker} directly here — achieves exactly that ordering, since this method itself
+     * still runs inside the caller's {@code @Transactional} boundary.
+     */
+    private void revokeSessionsAfterCommit(UUID tenantId, UUID employeeId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            employeeSessionRevoker.revokeAllSessions(tenantId, employeeId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                employeeSessionRevoker.revokeAllSessions(tenantId, employeeId);
+            }
+        });
     }
 
     private String canonicalRequest(ActorContext actor, String operation, String... parts) {

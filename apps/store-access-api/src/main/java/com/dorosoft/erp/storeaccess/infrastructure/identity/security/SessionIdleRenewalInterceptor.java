@@ -1,5 +1,6 @@
 package com.dorosoft.erp.storeaccess.infrastructure.identity.security;
 
+import com.dorosoft.erp.storeaccess.application.api.identity.UserActivity;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.Clock;

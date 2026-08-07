@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.TypeExcludeFilter;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * {@code @SpringBootApplication}'s default component scan only covers {@code com.dorosoft.erp.storeaccess};
@@ -19,6 +20,7 @@ import org.springframework.context.annotation.FilterType;
  * wired in by {@code @SpringBootApplication}'s composed (now-superseded) scan.
  */
 @SpringBootApplication
+@EnableScheduling
 @ComponentScan(
         basePackages = {"com.dorosoft.erp.storeaccess", "com.dorosoft.erp.platform.web"},
         excludeFilters = @ComponentScan.Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class))

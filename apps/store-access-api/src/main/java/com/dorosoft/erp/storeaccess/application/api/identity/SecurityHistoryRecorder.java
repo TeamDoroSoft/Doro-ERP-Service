@@ -95,6 +95,16 @@ public class SecurityHistoryRecorder {
         recordFailure(tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_ACCOUNT_LOCKED, employeeId, reasonCode);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordReauthenticationFailed(UUID tenantId, UUID storeId, UUID employeeId, String reasonCode) {
+        recordFailure(tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_REAUTHENTICATION_FAILED, employeeId, reasonCode);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordSessionInvalidated(UUID tenantId, UUID storeId, UUID employeeId, String reasonCode) {
+        recordFailure(tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_SESSION_INVALIDATED, employeeId, reasonCode);
+    }
+
     private void recordFailure(
             UUID tenantId, UUID storeId, SecurityHistoryEventType eventType, UUID employeeId, String reasonCode) {
         EmployeeSecurityHistory history = EmployeeSecurityHistory.occur(

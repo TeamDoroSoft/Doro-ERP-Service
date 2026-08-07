@@ -8,12 +8,24 @@ import java.util.UUID;
 /**
  * The secret-free subset of {@link EmployeeAccount} safe to store as an idempotent replay result and to
  * return from create/reset responses (ADR-02-009: "계정 ID, 상태와 passwordChangeRequired만 포함한다").
+ * Exposes {@link #roleName()}/{@link #statusName()} so the presentation layer — which may not depend on
+ * {@code domain} — can read them as plain {@code String}s without ever referencing {@link Role}/
+ * {@link EmployeeStatus} directly.
  */
-record EmployeeIdentitySnapshot(UUID employeeId, Role role, EmployeeStatus status, boolean passwordChangeRequired) {
+public record EmployeeIdentitySnapshot(
+        UUID employeeId, Role role, EmployeeStatus status, boolean passwordChangeRequired) {
 
     static EmployeeIdentitySnapshot from(EmployeeAccount account) {
         return new EmployeeIdentitySnapshot(
                 account.id(), account.role(), account.status(), account.passwordChangeRequired());
+    }
+
+    public String roleName() {
+        return role.name();
+    }
+
+    public String statusName() {
+        return status.name();
     }
 
     String serialize() {

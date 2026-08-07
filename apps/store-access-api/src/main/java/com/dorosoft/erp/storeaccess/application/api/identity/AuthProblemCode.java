@@ -3,7 +3,10 @@ package com.dorosoft.erp.storeaccess.application.api.identity;
 import com.dorosoft.erp.platform.web.ProblemCode;
 import org.springframework.http.HttpStatus;
 
-/** Error contract for employee login, Session validation and reauthentication (ADR-02-002/003/006/007/011). */
+/**
+ * Error contract for employee login, Session validation, reauthentication and Kiosk Cookie authentication
+ * (ADR-02-002/003/006/007/011/013).
+ */
 public enum AuthProblemCode implements ProblemCode {
 
     AUTHENTICATION_FAILED(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 올바르지 않습니다.", null),
@@ -14,7 +17,9 @@ public enum AuthProblemCode implements ProblemCode {
     SESSION_INVALIDATED(HttpStatus.UNAUTHORIZED, "Session이 무효화되었습니다. 다시 로그인해 주세요.", null),
     REAUTHENTICATION_REQUIRED(HttpStatus.FORBIDDEN, "중요 작업을 진행하려면 재인증이 필요합니다.", null),
     PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN, "비밀번호를 먼저 변경해야 합니다.", null),
-    SESSION_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 인증을 확인할 수 없습니다.", null);
+    SESSION_VALIDATION_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "일시적으로 인증을 확인할 수 없습니다.", null),
+    KIOSK_AUTHENTICATION_FAILED(HttpStatus.UNAUTHORIZED, "Kiosk 인증에 실패했습니다.", null),
+    AMBIGUOUS_AUTHENTICATION(HttpStatus.UNAUTHORIZED, "직원 인증과 Kiosk 인증을 동시에 사용할 수 없습니다.", null);
 
     private final HttpStatus status;
     private final String title;

@@ -52,6 +52,7 @@ doro:
         refill-interval: ${STORE_ACCESS_IDENTITY_RATE_LIMIT_CLIENT_IP_REFILL_INTERVAL:1m}
     security-history:
       retention-batch-size: ${STORE_ACCESS_IDENTITY_SECURITY_HISTORY_RETENTION_BATCH_SIZE:1000}
+      retention-cron: ${STORE_ACCESS_IDENTITY_SECURITY_HISTORY_RETENTION_CRON:0 0 3 * * *}
 
 server:
   port: ${STORE_ACCESS_PORT:8081}

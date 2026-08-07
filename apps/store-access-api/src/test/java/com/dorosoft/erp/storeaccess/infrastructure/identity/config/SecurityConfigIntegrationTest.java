@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeeAuthenticationToken;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.security.EmployeePrincipal;
-import com.dorosoft.erp.storeaccess.infrastructure.identity.security.UserActivity;
+import com.dorosoft.erp.storeaccess.application.api.identity.UserActivity;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.EmployeeSessionAttributes;
 import com.dorosoft.erp.storeaccess.infrastructure.identity.session.SessionPrincipalIndexKey;
 import jakarta.servlet.http.Cookie;

@@ -143,6 +143,34 @@ class EmployeeAccountTest {
         assertThat(succeeded.lastPasswordAuthenticatedAt()).isEqualTo(loginAt);
     }
 
+    @Test
+    void changeRoleReplacesRoleAndUpdatesTimestampWithoutTouchingOtherFields() {
+        EmployeeAccount account = activeAccount();
+        Instant changedAt = now.plusSeconds(30);
+
+        EmployeeAccount changed = account.changeRole(Role.MANAGER, changedAt);
+
+        assertThat(changed.role()).isEqualTo(Role.MANAGER);
+        assertThat(changed.updatedAt()).isEqualTo(changedAt);
+        assertThat(changed.status()).isEqualTo(account.status());
+        assertThat(changed.passwordHash()).isEqualTo(account.passwordHash());
+        assertThat(changed.createdAt()).isEqualTo(account.createdAt());
+    }
+
+    @Test
+    void changeStatusReplacesStatusAndUpdatesTimestampWithoutTouchingOtherFields() {
+        EmployeeAccount account = activeAccount();
+        Instant changedAt = now.plusSeconds(30);
+
+        EmployeeAccount changed = account.changeStatus(EmployeeStatus.INACTIVE, changedAt);
+
+        assertThat(changed.status()).isEqualTo(EmployeeStatus.INACTIVE);
+        assertThat(changed.updatedAt()).isEqualTo(changedAt);
+        assertThat(changed.role()).isEqualTo(account.role());
+        assertThat(changed.passwordHash()).isEqualTo(account.passwordHash());
+        assertThat(changed.createdAt()).isEqualTo(account.createdAt());
+    }
+
     private EmployeeAccount activeAccount() {
         return EmployeeAccount.createWithTemporaryPassword(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),

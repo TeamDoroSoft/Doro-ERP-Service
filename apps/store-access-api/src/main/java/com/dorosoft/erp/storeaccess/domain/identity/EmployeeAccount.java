@@ -123,4 +123,18 @@ public record EmployeeAccount(
                 id, tenantId, storeId, loginId, passwordHash, role, status, passwordChangeRequired,
                 temporaryPasswordExpiresAt, 0, null, 0, null, now, version, createdAt, now);
     }
+
+    public EmployeeAccount changeRole(Role newRole, Instant now) {
+        return new EmployeeAccount(
+                id, tenantId, storeId, loginId, passwordHash, newRole, status, passwordChangeRequired,
+                temporaryPasswordExpiresAt, failedLoginCount, lastFailedAt, lockoutLevel, lockedUntil,
+                lastPasswordAuthenticatedAt, version, createdAt, now);
+    }
+
+    public EmployeeAccount changeStatus(EmployeeStatus newStatus, Instant now) {
+        return new EmployeeAccount(
+                id, tenantId, storeId, loginId, passwordHash, role, newStatus, passwordChangeRequired,
+                temporaryPasswordExpiresAt, failedLoginCount, lastFailedAt, lockoutLevel, lockedUntil,
+                lastPasswordAuthenticatedAt, version, createdAt, now);
+    }
 }

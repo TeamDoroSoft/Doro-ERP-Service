@@ -137,4 +137,19 @@ public record EmployeeAccount(
                 temporaryPasswordExpiresAt, failedLoginCount, lastFailedAt, lockoutLevel, lockedUntil,
                 lastPasswordAuthenticatedAt, version, createdAt, now);
     }
+
+    /** Self-service password change (ADR-02-009): clears the temporary-password requirement. */
+    public EmployeeAccount changePassword(String newPasswordHash, Instant now) {
+        return new EmployeeAccount(
+                id, tenantId, storeId, loginId, newPasswordHash, role, status, false, null,
+                failedLoginCount, lastFailedAt, lockoutLevel, lockedUntil, now, version, createdAt, now);
+    }
+
+    /** Administrator-issued password reset (ADR-02-009): a new 24-hour temporary password. */
+    public EmployeeAccount resetPassword(String newTemporaryPasswordHash, Instant now) {
+        return new EmployeeAccount(
+                id, tenantId, storeId, loginId, newTemporaryPasswordHash, role, status, true,
+                now.plus(TEMPORARY_PASSWORD_VALIDITY), failedLoginCount, lastFailedAt, lockoutLevel, lockedUntil,
+                lastPasswordAuthenticatedAt, version, createdAt, now);
+    }
 }

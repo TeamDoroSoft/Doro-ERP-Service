@@ -171,6 +171,47 @@ class EmployeeAccountTest {
         assertThat(changed.createdAt()).isEqualTo(account.createdAt());
     }
 
+    @Test
+    void changePasswordClearsTemporaryPasswordStateAndRefreshesLastAuthenticatedAt() {
+        EmployeeAccount account = activeAccount();
+        Instant changedAt = now.plusSeconds(30);
+
+        EmployeeAccount changed = account.changePassword("new-argon2-hash", changedAt);
+
+        assertThat(changed.passwordHash()).isEqualTo("new-argon2-hash");
+        assertThat(changed.passwordChangeRequired()).isFalse();
+        assertThat(changed.temporaryPasswordExpiresAt()).isNull();
+        assertThat(changed.lastPasswordAuthenticatedAt()).isEqualTo(changedAt);
+        assertThat(changed.updatedAt()).isEqualTo(changedAt);
+        assertThat(changed.role()).isEqualTo(account.role());
+    }
+
+    @Test
+    void changePasswordDoesNotResetLockoutState() {
+        EmployeeAccount locked = lockedAtLevelOne();
+
+        EmployeeAccount changed = locked.changePassword("new-argon2-hash", locked.lockedUntil().plusSeconds(1));
+
+        assertThat(changed.failedLoginCount()).isEqualTo(locked.failedLoginCount());
+        assertThat(changed.lockoutLevel()).isEqualTo(locked.lockoutLevel());
+        assertThat(changed.lockedUntil()).isEqualTo(locked.lockedUntil());
+    }
+
+    @Test
+    void resetPasswordSetsANewTwentyFourHourTemporaryPasswordAndDoesNotTouchLastAuthenticatedAt() {
+        EmployeeAccount account = activeAccount().changePassword("old-argon2-hash", now.plusSeconds(10))
+                .recordSuccessfulLogin(now.plusSeconds(20));
+        Instant resetAt = now.plusSeconds(30);
+
+        EmployeeAccount reset = account.resetPassword("temp-argon2-hash", resetAt);
+
+        assertThat(reset.passwordHash()).isEqualTo("temp-argon2-hash");
+        assertThat(reset.passwordChangeRequired()).isTrue();
+        assertThat(reset.temporaryPasswordExpiresAt()).isEqualTo(resetAt.plus(Duration.ofHours(24)));
+        assertThat(reset.lastPasswordAuthenticatedAt()).isEqualTo(account.lastPasswordAuthenticatedAt());
+        assertThat(reset.updatedAt()).isEqualTo(resetAt);
+    }
+
     private EmployeeAccount activeAccount() {
         return EmployeeAccount.createWithTemporaryPassword(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),

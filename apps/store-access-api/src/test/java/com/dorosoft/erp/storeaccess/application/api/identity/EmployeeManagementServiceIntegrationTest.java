@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -38,9 +39,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * and last-active-OWNER protection under concurrent role changes (ADR-02-010).
  */
 @SpringBootTest(properties = {
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,"
-                + "org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration,"
-                + "org.springframework.boot.autoconfigure.session.SessionAutoConfiguration"
+        "spring.autoconfigure.exclude=org.springframework.boot.session.autoconfigure.SessionAutoConfiguration,"
+                + "org.springframework.boot.session.data.redis.autoconfigure.SessionDataRedisAutoConfiguration"
 })
 @Testcontainers
 class EmployeeManagementServiceIntegrationTest {
@@ -67,6 +67,9 @@ class EmployeeManagementServiceIntegrationTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Test
     void ownerCanCreateEmployeesOfAnyRole() {
@@ -253,6 +256,128 @@ class EmployeeManagementServiceIntegrationTest {
         }
     }
 
+    @Test
+    void ownerCanResetStaffPasswordAndReplayingTheSameKeyReturnsTheSameSnapshot() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        EmployeeAccount staff = createAndSave(tenantId, storeId, Role.STAFF, EmployeeStatus.ACTIVE);
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        EmployeeIdentitySnapshot first =
+                service.resetPassword(owner, idempotencyKey, staff.id(), "a-brand-new-temp-passphrase-1");
+        EmployeeIdentitySnapshot replay =
+                service.resetPassword(owner, idempotencyKey, staff.id(), "a-brand-new-temp-passphrase-1");
+
+        assertThat(first.employeeId()).isEqualTo(staff.id());
+        assertThat(first.passwordChangeRequired()).isTrue();
+        assertThat(replay).isEqualTo(first);
+    }
+
+    @Test
+    void managerCanOnlyResetStaffPassword() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext manager = actorFor(createAndSave(tenantId, storeId, Role.MANAGER, EmployeeStatus.ACTIVE));
+        EmployeeAccount owner = createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE);
+
+        assertThatThrownBy(() -> service.resetPassword(
+                manager, UUID.randomUUID().toString(), owner.id(), "a-brand-new-temp-passphrase-2"))
+                .asInstanceOf(type(ProblemAwareException.class))
+                .extracting(ProblemAwareException::code)
+                .isEqualTo(EmployeeManagementProblemCode.EMPLOYEE_MANAGEMENT_FORBIDDEN);
+    }
+
+    @Test
+    void adminCannotResetOwnPasswordViaTheAdminApi() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount ownerAccount = createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE);
+        ActorContext owner = actorFor(ownerAccount);
+
+        assertThatThrownBy(() -> service.resetPassword(
+                owner, UUID.randomUUID().toString(), ownerAccount.id(), "a-brand-new-temp-passphrase-3"))
+                .asInstanceOf(type(ProblemAwareException.class))
+                .extracting(ProblemAwareException::code)
+                .isEqualTo(EmployeeManagementProblemCode.SELF_ACCOUNT_ADMIN_CHANGE_NOT_ALLOWED);
+    }
+
+    @Test
+    void changeOwnPasswordSucceedsWithTheCorrectCurrentPassword() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount staffAccount =
+                createAndSaveWithPassword(tenantId, storeId, Role.STAFF, "the-current-passphrase-value");
+        ActorContext staff = actorFor(staffAccount);
+
+        EmployeeAccount changed = service.changeOwnPassword(
+                staff, "the-current-passphrase-value", "a-completely-new-passphrase-value");
+
+        assertThat(changed.passwordChangeRequired()).isFalse();
+        assertThat(passwordEncoder.matches("a-completely-new-passphrase-value", changed.passwordHash())).isTrue();
+    }
+
+    @Test
+    void changeOwnPasswordFailsWithAnIncorrectCurrentPassword() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount staffAccount =
+                createAndSaveWithPassword(tenantId, storeId, Role.STAFF, "the-current-passphrase-value");
+        ActorContext staff = actorFor(staffAccount);
+
+        assertThatThrownBy(() -> service.changeOwnPassword(
+                staff, "the-wrong-passphrase-value", "a-completely-new-passphrase-value"))
+                .asInstanceOf(type(ProblemAwareException.class))
+                .extracting(ProblemAwareException::code)
+                .isEqualTo(PasswordManagementProblemCode.CURRENT_PASSWORD_INCORRECT);
+    }
+
+    @Test
+    void changeOwnPasswordRejectsAWeakNewPassword() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount staffAccount =
+                createAndSaveWithPassword(tenantId, storeId, Role.STAFF, "the-current-passphrase-value");
+        ActorContext staff = actorFor(staffAccount);
+
+        assertThatThrownBy(() -> service.changeOwnPassword(staff, "the-current-passphrase-value", "too-short"))
+                .asInstanceOf(type(ProblemAwareException.class))
+                .extracting(ProblemAwareException::code)
+                .isEqualTo(PasswordManagementProblemCode.WEAK_PASSWORD);
+    }
+
+    @Test
+    void changeOwnPasswordRejectsReusingTheCurrentPassword() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        EmployeeAccount staffAccount =
+                createAndSaveWithPassword(tenantId, storeId, Role.STAFF, "the-current-passphrase-value");
+        ActorContext staff = actorFor(staffAccount);
+
+        assertThatThrownBy(() -> service.changeOwnPassword(
+                staff, "the-current-passphrase-value", "the-current-passphrase-value"))
+                .asInstanceOf(type(ProblemAwareException.class))
+                .extracting(ProblemAwareException::code)
+                .isEqualTo(PasswordManagementProblemCode.PASSWORD_REUSE_NOT_ALLOWED);
+    }
+
+    @Test
+    void createEmployeeIdempotentlyReplaysTheSameSnapshotForTheSameKey() {
+        UUID tenantId = UUID.randomUUID();
+        UUID storeId = UUID.randomUUID();
+        ActorContext owner = actorFor(createAndSave(tenantId, storeId, Role.OWNER, EmployeeStatus.ACTIVE));
+        String idempotencyKey = UUID.randomUUID().toString();
+        LoginId loginId = freshLoginId();
+
+        EmployeeIdentitySnapshot first = service.createEmployeeIdempotently(
+                owner, idempotencyKey, loginId, "a-temporary-passphrase-value", Role.STAFF);
+        EmployeeIdentitySnapshot replay = service.createEmployeeIdempotently(
+                owner, idempotencyKey, loginId, "a-temporary-passphrase-value", Role.STAFF);
+
+        assertThat(replay).isEqualTo(first);
+        assertThat(employeeAccountRepository.findByTenantIdAndLoginId(tenantId, loginId)).isPresent();
+    }
+
     private Object resultOrFailure(Future<Object> future) throws InterruptedException {
         try {
             return future.get(15, TimeUnit.SECONDS);
@@ -269,6 +394,13 @@ class EmployeeManagementServiceIntegrationTest {
         if (status == EmployeeStatus.INACTIVE) {
             account = account.changeStatus(EmployeeStatus.INACTIVE, clock.instant());
         }
+        return employeeAccountRepository.save(account);
+    }
+
+    private EmployeeAccount createAndSaveWithPassword(UUID tenantId, UUID storeId, Role role, String rawPassword) {
+        EmployeeAccount account = EmployeeAccount.createWithTemporaryPassword(
+                UUID.randomUUID(), tenantId, storeId, freshLoginId(), passwordEncoder.encode(rawPassword), role,
+                clock.instant());
         return employeeAccountRepository.save(account);
     }
 

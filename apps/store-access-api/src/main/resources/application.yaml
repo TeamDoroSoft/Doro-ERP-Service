@@ -23,8 +23,10 @@ spring:
         enabled: ${STORE_ACCESS_REDIS_SSL_ENABLED:false}
   session:
     timeout: ${STORE_ACCESS_SESSION_TIMEOUT:30m}
-    redis:
-      namespace: ${STORE_ACCESS_SESSION_NAMESPACE:doro:store-access:session}
+    data:
+      redis:
+        namespace: ${STORE_ACCESS_SESSION_NAMESPACE:doro:store-access:session}
+        repository-type: indexed
 
 doro:
   identity:

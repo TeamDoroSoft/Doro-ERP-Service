@@ -38,9 +38,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
  * ADR-02-014).
  */
 @SpringBootTest(properties = {
-        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,"
-                + "org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration,"
-                + "org.springframework.boot.autoconfigure.session.SessionAutoConfiguration"
+        "spring.autoconfigure.exclude=org.springframework.boot.session.autoconfigure.SessionAutoConfiguration,"
+                + "org.springframework.boot.session.data.redis.autoconfigure.SessionDataRedisAutoConfiguration"
 })
 @Testcontainers
 class IdentityPersistenceIntegrationTest {

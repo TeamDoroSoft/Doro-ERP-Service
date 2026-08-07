@@ -16,6 +16,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
+    runtimeOnly("org.bouncycastle:bcprov-jdk18on:1.81")
 
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 

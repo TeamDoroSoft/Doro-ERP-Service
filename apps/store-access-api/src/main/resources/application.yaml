@@ -26,6 +26,19 @@ spring:
     redis:
       namespace: ${STORE_ACCESS_SESSION_NAMESPACE:doro:store-access:session}
 
+doro:
+  identity:
+    password:
+      memory-kib: ${STORE_ACCESS_IDENTITY_PASSWORD_MEMORY_KIB:19456}
+      iterations: ${STORE_ACCESS_IDENTITY_PASSWORD_ITERATIONS:2}
+      parallelism: ${STORE_ACCESS_IDENTITY_PASSWORD_PARALLELISM:1}
+      salt-length: ${STORE_ACCESS_IDENTITY_PASSWORD_SALT_LENGTH:16}
+      hash-length: ${STORE_ACCESS_IDENTITY_PASSWORD_HASH_LENGTH:32}
+    hmac:
+      rate-limit-secret: ${STORE_ACCESS_IDENTITY_HMAC_RATE_LIMIT_SECRET:}
+      idempotency-secret: ${STORE_ACCESS_IDENTITY_HMAC_IDEMPOTENCY_SECRET:}
+      kiosk-credential-secret: ${STORE_ACCESS_IDENTITY_HMAC_KIOSK_CREDENTIAL_SECRET:}
+
 server:
   port: ${STORE_ACCESS_PORT:8081}
   shutdown: graceful

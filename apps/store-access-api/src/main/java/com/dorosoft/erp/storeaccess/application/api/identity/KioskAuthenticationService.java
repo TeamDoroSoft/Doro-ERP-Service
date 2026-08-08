@@ -10,9 +10,6 @@ import com.dorosoft.erp.storeaccess.domain.identity.KioskDevice;
 import com.dorosoft.erp.storeaccess.domain.identity.KioskDeviceStatus;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -27,25 +24,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KioskAuthenticationService {
 
-    private static final Duration REFRESH_AFTER = KioskCookieAttributes.MAX_AGE.minus(KioskCookieAttributes.RENEWAL_THRESHOLD);
-
     private final KioskDeviceRepository kioskDeviceRepository;
     private final ObjectProvider<TenantLookupPort> tenantLookupPortProvider;
     private final KioskCredentialDigestSigner digestSigner;
-    private final Clock clock;
 
     public KioskAuthenticationService(
             KioskDeviceRepository kioskDeviceRepository,
             ObjectProvider<TenantLookupPort> tenantLookupPortProvider,
-            KioskCredentialDigestSigner digestSigner,
-            Clock clock) {
+            KioskCredentialDigestSigner digestSigner) {
         this.kioskDeviceRepository = kioskDeviceRepository;
         this.tenantLookupPortProvider = tenantLookupPortProvider;
         this.digestSigner = digestSigner;
-        this.clock = clock;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public KioskActivationResult activate(String tenantCode, String deviceCode, String secretRaw) {
         ActiveTenantContext tenant = resolveTenantByCode(tenantCode);
         if (tenant == null) {
@@ -55,12 +47,10 @@ public class KioskAuthenticationService {
                 .orElseThrow(this::kioskAuthenticationFailed);
         requireActiveWithMatchingSecret(device, secretRaw);
 
-        Instant now = clock.instant();
-        kioskDeviceRepository.save(device.recordAuthentication(now));
         return new KioskActivationResult(device.id(), KioskCredentialFormat.format(device.credentialId(), secretRaw));
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public KioskAuthenticationResult authenticateCookie(String cookieCredential) {
         ParsedKioskCredential parsed = KioskCredentialFormat.parse(cookieCredential).orElseThrow(this::kioskAuthenticationFailed);
         KioskDevice device = kioskDeviceRepository.findByCredentialId(parsed.credentialId())
@@ -72,13 +62,7 @@ public class KioskAuthenticationService {
             throw kioskAuthenticationFailed();
         }
 
-        Instant now = clock.instant();
-        boolean shouldRefresh = device.lastAuthenticatedAt() == null
-                || Duration.between(device.lastAuthenticatedAt(), now).compareTo(REFRESH_AFTER) >= 0;
-        if (shouldRefresh) {
-            kioskDeviceRepository.save(device.recordAuthentication(now));
-        }
-        return new KioskAuthenticationResult(device.id(), device.tenantId(), device.storeId(), device.deviceCode(), shouldRefresh);
+        return new KioskAuthenticationResult(device.id(), device.tenantId(), device.storeId(), device.deviceCode());
     }
 
     private void requireActiveWithMatchingSecret(KioskDevice device, String secretRaw) {

@@ -82,7 +82,9 @@ class EmployeeSecurityHistoryRepositoryAdapter implements EmployeeSecurityHistor
                                 cb.equal(staffRoot.get("tenantId"), query.tenantId()),
                                 cb.equal(staffRoot.get("role"), Role.STAFF));
                 predicates.add(cb.or(
-                        cb.equal(root.get("actorEmployeeId"), query.restrictToActorId()),
+                        cb.and(
+                                cb.equal(root.get("targetType"), "EMPLOYEE"),
+                                cb.equal(root.get("targetId"), query.restrictToActorId())),
                         cb.and(cb.equal(root.get("targetType"), "EMPLOYEE"), root.get("targetId").in(staffIds)),
                         cb.equal(root.get("targetType"), "KIOSK_DEVICE")));
             }

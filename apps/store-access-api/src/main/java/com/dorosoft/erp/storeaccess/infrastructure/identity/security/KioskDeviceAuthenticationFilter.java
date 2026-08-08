@@ -76,9 +76,6 @@ public class KioskDeviceAuthenticationFilter extends OncePerRequestFilter {
                 result.tenantId(), result.storeId(), result.kioskDeviceId(), result.deviceCode());
         try {
             SecurityContextHolder.getContext().setAuthentication(new KioskAuthenticationToken(principal));
-            if (result.cookieRefreshed()) {
-                response.addHeader(HttpHeaders.SET_COOKIE, refreshedCookie(cookieValue).toString());
-            }
             filterChain.doFilter(request, response);
         } finally {
             SecurityContextHolder.clearContext();
@@ -96,16 +93,6 @@ public class KioskDeviceAuthenticationFilter extends OncePerRequestFilter {
             }
         }
         return null;
-    }
-
-    private ResponseCookie refreshedCookie(String value) {
-        return ResponseCookie.from(KioskCookieAttributes.COOKIE_NAME, value)
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("Lax")
-                .path(KioskCookieAttributes.COOKIE_PATH)
-                .maxAge(KioskCookieAttributes.MAX_AGE)
-                .build();
     }
 
     private ResponseCookie expiredCookie() {

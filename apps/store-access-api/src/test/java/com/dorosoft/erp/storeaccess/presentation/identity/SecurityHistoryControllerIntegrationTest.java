@@ -9,13 +9,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dorosoft.erp.storeaccess.application.port.identity.ActiveTenantContext;
 import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeAccountRepository;
+import com.dorosoft.erp.storeaccess.application.port.identity.EmployeeSecurityHistoryRepository;
 import com.dorosoft.erp.storeaccess.application.port.identity.TenantLookupPort;
 import com.dorosoft.erp.storeaccess.domain.identity.EmployeeAccount;
+import com.dorosoft.erp.storeaccess.domain.identity.EmployeeSecurityHistory;
 import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryEventType;
+import com.dorosoft.erp.storeaccess.domain.identity.SecurityHistoryResult;
 import jakarta.servlet.http.Cookie;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -104,6 +109,9 @@ class SecurityHistoryControllerIntegrationTest {
     private EmployeeAccountRepository employeeAccountRepository;
 
     @Autowired
+    private EmployeeSecurityHistoryRepository employeeSecurityHistoryRepository;
+
+    @Autowired
     private InMemoryTenantLookupPort tenantLookupPort;
 
     @Autowired
@@ -141,6 +149,13 @@ class SecurityHistoryControllerIntegrationTest {
         return employeeAccountRepository.save(EmployeeAccount.createWithTemporaryPassword(
                 UUID.randomUUID(), tenant.tenantId(), tenant.storeId(), loginId, passwordEncoder.encode(password),
                 role, clock.instant()));
+    }
+
+    private void seedHistory(Tenant tenant, UUID targetId, Instant occurredAt) {
+        employeeSecurityHistoryRepository.save(EmployeeSecurityHistory.occur(
+                UUID.randomUUID(), tenant.tenantId(), tenant.storeId(), SecurityHistoryEventType.EMPLOYEE_CREATED,
+                UUID.randomUUID(), "EMPLOYEE", targetId, SecurityHistoryResult.SUCCESS, null, null, null,
+                occurredAt));
     }
 
     @Test
@@ -204,5 +219,64 @@ class SecurityHistoryControllerIntegrationTest {
                         .queryParam("to", to))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_SECURITY_HISTORY_RANGE"));
+    }
+
+    @Test
+    void supplyingOnlyOneCursorParameterIsRejected() throws Exception {
+        Tenant tenant = newTenant();
+        LoginId ownerLoginId = newLoginId();
+        seedEmployee(tenant, Role.OWNER, ownerLoginId, PASSWORD);
+        Cookie ownerSession = loginAs(tenant.tenantCode(), ownerLoginId, PASSWORD);
+
+        String from = clock.instant().minus(Duration.ofHours(1)).toString();
+        String to = clock.instant().plus(Duration.ofHours(1)).toString();
+        mockMvc.perform(get("/api/v1/security-history")
+                        .cookie(ownerSession)
+                        .queryParam("from", from)
+                        .queryParam("to", to)
+                        .queryParam("cursorOccurredAt", clock.instant().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SECURITY_HISTORY_CURSOR"));
+
+        mockMvc.perform(get("/api/v1/security-history")
+                        .cookie(ownerSession)
+                        .queryParam("from", from)
+                        .queryParam("to", to)
+                        .queryParam("cursorId", UUID.randomUUID().toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SECURITY_HISTORY_CURSOR"));
+    }
+
+    @Test
+    void hasMoreReflectsWhetherARecordExistsBeyondTheRequestedPage() throws Exception {
+        Tenant tenant = newTenant();
+        LoginId ownerLoginId = newLoginId();
+        seedEmployee(tenant, Role.OWNER, ownerLoginId, PASSWORD);
+        Cookie ownerSession = loginAs(tenant.tenantCode(), ownerLoginId, PASSWORD);
+
+        Instant base = clock.instant();
+        for (int i = 0; i < 3; i++) {
+            seedHistory(tenant, UUID.randomUUID(), base.minusSeconds(i));
+        }
+        String from = base.minus(Duration.ofHours(1)).toString();
+        String to = base.plus(Duration.ofHours(1)).toString();
+
+        mockMvc.perform(get("/api/v1/security-history")
+                        .cookie(ownerSession)
+                        .queryParam("from", from)
+                        .queryParam("to", to)
+                        .queryParam("size", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(3))
+                .andExpect(jsonPath("$.hasMore").value(false));
+
+        mockMvc.perform(get("/api/v1/security-history")
+                        .cookie(ownerSession)
+                        .queryParam("from", from)
+                        .queryParam("to", to)
+                        .queryParam("size", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.hasMore").value(true));
     }
 }

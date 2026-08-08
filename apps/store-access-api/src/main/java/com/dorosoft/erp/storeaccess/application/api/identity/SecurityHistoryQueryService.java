@@ -16,10 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Local security history lookup (ADR-02-015): OWNER sees every Tenant employee/Kiosk record; MANAGER sees
- * only their own actions, {@code STAFF}-targeted records, and Kiosk records; {@code STAFF} may not query at
- * all. {@link ActorContext} stands in for the authenticated Session until feature 02 step 2's login is
- * complete; a future Controller will build it from the Session and expose this as
- * {@code GET /api/v1/security-history}.
+ * only records targeting their own account, {@code STAFF}-targeted records, and Kiosk records — being the
+ * record's actor does not by itself grant visibility; {@code STAFF} may not query at all.
  */
 @Service
 public class SecurityHistoryQueryService {
@@ -36,24 +34,18 @@ public class SecurityHistoryQueryService {
 
     @Transactional(readOnly = true)
     public List<EmployeeSecurityHistory> search(ActorContext actor, SecurityHistorySearchRequest request) {
-        requireCanQuery(actor);
-        validateRange(request.from(), request.to());
         int size = normalizeSize(request.size());
-        UUID restrictToActorId = actor.role() == Role.MANAGER ? actor.employeeId() : null;
-
-        SecurityHistoryQuery query = new SecurityHistoryQuery(
-                actor.tenantId(), request.from(), request.to(), request.eventType(), request.targetType(),
-                request.targetId(), request.result(), request.cursorOccurredAt(), request.cursorId(), size,
-                restrictToActorId);
-        return repository.search(query);
+        return fetch(actor, request, size);
     }
 
     /**
      * Controller-facing overload: {@code eventType}/{@code result} arrive as raw query-parameter Strings
-     * (the presentation layer may not reference domain enum types) and are parsed here.
+     * (the presentation layer may not reference domain enum types) and are parsed here. Fetches one record
+     * past the requested {@code size} to determine {@code hasMore} without a separate {@code count} query
+     * (ADR-02-015), then truncates the page back down to {@code size}.
      */
     @Transactional(readOnly = true)
-    public List<SecurityHistoryEntry> searchForController(
+    public SecurityHistoryPage searchForController(
             ActorContext actor,
             Instant from,
             Instant to,
@@ -67,7 +59,24 @@ public class SecurityHistoryQueryService {
         SecurityHistorySearchRequest request = new SecurityHistorySearchRequest(
                 from, to, parseEventType(eventTypeRaw), targetType, targetId, parseResult(resultRaw),
                 cursorOccurredAt, cursorId, size);
-        return search(actor, request).stream().map(SecurityHistoryEntry::from).toList();
+        int normalizedSize = normalizeSize(size);
+        List<EmployeeSecurityHistory> fetched = fetch(actor, request, normalizedSize + 1);
+        boolean hasMore = fetched.size() > normalizedSize;
+        List<EmployeeSecurityHistory> page = hasMore ? fetched.subList(0, normalizedSize) : fetched;
+        return new SecurityHistoryPage(page.stream().map(SecurityHistoryEntry::from).toList(), hasMore);
+    }
+
+    private List<EmployeeSecurityHistory> fetch(ActorContext actor, SecurityHistorySearchRequest request, int fetchSize) {
+        requireCanQuery(actor);
+        validateRange(request.from(), request.to());
+        validateCursorPair(request.cursorOccurredAt(), request.cursorId());
+        UUID restrictToActorId = actor.role() == Role.MANAGER ? actor.employeeId() : null;
+
+        SecurityHistoryQuery query = new SecurityHistoryQuery(
+                actor.tenantId(), request.from(), request.to(), request.eventType(), request.targetType(),
+                request.targetId(), request.result(), request.cursorOccurredAt(), request.cursorId(), fetchSize,
+                restrictToActorId);
+        return repository.search(query);
     }
 
     private SecurityHistoryEventType parseEventType(String raw) {
@@ -91,6 +100,13 @@ public class SecurityHistoryQueryService {
         } catch (IllegalArgumentException e) {
             throw new ProblemAwareException(
                     SecurityHistoryProblemCode.INVALID_SECURITY_HISTORY_FILTER, "결과 값이 올바르지 않습니다.");
+        }
+    }
+
+    private void validateCursorPair(Instant cursorOccurredAt, UUID cursorId) {
+        if ((cursorOccurredAt == null) != (cursorId == null)) {
+            throw new ProblemAwareException(
+                    SecurityHistoryProblemCode.INVALID_SECURITY_HISTORY_CURSOR, "Cursor 값이 올바르지 않습니다.");
         }
     }
 

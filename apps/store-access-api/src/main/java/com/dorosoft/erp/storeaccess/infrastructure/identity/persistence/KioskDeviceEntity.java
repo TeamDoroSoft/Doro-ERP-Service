@@ -46,16 +46,12 @@ class KioskDeviceEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @Column(name = "last_authenticated_at")
-    private Instant lastAuthenticatedAt;
-
     protected KioskDeviceEntity() {
     }
 
     private KioskDeviceEntity(
             UUID id, UUID tenantId, UUID storeId, String deviceCode, String credentialId, String secretDigest,
-            int credentialVersion, KioskDeviceStatus status, Instant createdAt, Instant updatedAt,
-            Instant lastAuthenticatedAt) {
+            int credentialVersion, KioskDeviceStatus status, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.tenantId = tenantId;
         this.storeId = storeId;
@@ -66,7 +62,6 @@ class KioskDeviceEntity {
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
-        this.lastAuthenticatedAt = lastAuthenticatedAt;
     }
 
     static KioskDeviceEntity fromDomain(KioskDevice device) {
@@ -80,13 +75,12 @@ class KioskDeviceEntity {
                 device.credentialVersion(),
                 device.status(),
                 device.createdAt(),
-                device.updatedAt(),
-                device.lastAuthenticatedAt());
+                device.updatedAt());
     }
 
     KioskDevice toDomain() {
         return new KioskDevice(
                 id, tenantId, storeId, deviceCode, credentialId, secretDigest, credentialVersion, status,
-                createdAt, updatedAt, lastAuthenticatedAt);
+                createdAt, updatedAt);
     }
 }

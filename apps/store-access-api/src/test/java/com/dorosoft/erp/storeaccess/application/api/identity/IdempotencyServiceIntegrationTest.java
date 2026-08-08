@@ -174,7 +174,7 @@ class IdempotencyServiceIntegrationTest {
     }
 
     @Test
-    void concurrentRequestsWithTheSameKeyExecuteTheOperationExactlyOnce() throws Exception {
+    void concurrentRequestsWithTheSameKeyAndPayloadBothReceiveTheSameSuccessfulResult() throws Exception {
         UUID tenantId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         String key = UUID.randomUUID().toString();
@@ -188,18 +188,41 @@ class IdempotencyServiceIntegrationTest {
             Future<String> future1 = executor.submit(attempt);
             Future<String> future2 = executor.submit(attempt);
 
+            String outcome1 = future1.get(15, TimeUnit.SECONDS);
+            String outcome2 = future2.get(15, TimeUnit.SECONDS);
+
+            assertThat(executions.get()).isEqualTo(1);
+            assertThat(outcome1).isEqualTo(outcome2);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentRequestsWithTheSameKeyButDifferentPayloadsRejectTheLoserAsReused() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String key = UUID.randomUUID().toString();
+        Callable<String> attemptA = () -> idempotencyService.execute(
+                tenantId, actorId, OPERATION, key, "payload-a", Function.identity(), Function.identity(), () -> "result-a");
+        Callable<String> attemptB = () -> idempotencyService.execute(
+                tenantId, actorId, OPERATION, key, "payload-b", Function.identity(), Function.identity(), () -> "result-b");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> future1 = executor.submit(attemptA);
+            Future<String> future2 = executor.submit(attemptB);
+
             Object outcome1 = resultOrFailure(future1);
             Object outcome2 = resultOrFailure(future2);
 
-            assertThat(executions.get()).isEqualTo(1);
             long successCount = Stream.of(outcome1, outcome2).filter(String.class::isInstance).count();
-            assertThat(successCount).isGreaterThanOrEqualTo(1);
-            if (successCount == 2) {
-                assertThat(outcome1).isEqualTo(outcome2);
-            } else {
-                Object rejected = outcome1 instanceof String ? outcome2 : outcome1;
-                assertThat(rejected).isInstanceOf(ProblemAwareException.class);
-            }
+            assertThat(successCount).isEqualTo(1);
+            Object rejected = outcome1 instanceof String ? outcome2 : outcome1;
+            assertThat(rejected)
+                    .asInstanceOf(type(ProblemAwareException.class))
+                    .extracting(ProblemAwareException::code)
+                    .isEqualTo(IdempotencyProblemCode.IDEMPOTENCY_KEY_REUSED);
         } finally {
             executor.shutdownNow();
         }

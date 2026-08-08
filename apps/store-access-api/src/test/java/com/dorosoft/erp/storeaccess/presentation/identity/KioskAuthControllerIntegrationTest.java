@@ -18,7 +18,6 @@ import com.dorosoft.erp.storeaccess.domain.identity.LoginId;
 import com.dorosoft.erp.storeaccess.domain.identity.Role;
 import jakarta.servlet.http.Cookie;
 import java.time.Clock;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,7 +43,8 @@ import org.testcontainers.utility.DockerImageName;
 /**
  * End-to-end: Kiosk activation and Cookie authentication (ADR-02-013) — Cookie issuance, rejection of a wrong
  * Secret, rejection of a revoked device's Cookie, the 401 AMBIGUOUS_AUTHENTICATION rule when a valid employee
- * Session and a valid Kiosk Cookie are both presented, and the 7-day Cookie-refresh threshold.
+ * Session and a valid Kiosk Cookie are both presented, and the fixed 30-day Cookie lifetime (no Sliding
+ * Renewal on a successful Kiosk request).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties = {
         "doro.identity.rate-limit.account.capacity=1000",
@@ -263,7 +263,7 @@ class KioskAuthControllerIntegrationTest {
     }
 
     @Test
-    void freshlyActivatedCookieIsNotReissuedButAnAgingOneIsRefreshed() throws Exception {
+    void successfulKioskRequestsNeverReissueTheCookie() throws Exception {
         Tenant tenant = newTenant();
         LoginId ownerLoginId = newLoginId();
         employeeAccountRepository.save(EmployeeAccount.createWithTemporaryPassword(
@@ -274,19 +274,11 @@ class KioskAuthControllerIntegrationTest {
         String deviceCode = "device-" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         Cookie kioskCookie = registerDeviceAndActivate(tenant, ownerSession, deviceCode);
 
-        var freshResponse = mockMvc.perform(get("/api/v1/employees").cookie(kioskCookie))
-                .andExpect(status().isUnauthorized())
-                .andReturn();
-        assertThat(freshResponse.getResponse().getCookie(KIOSK_COOKIE_NAME)).isNull();
-
-        KioskDevice device = kioskDeviceRepository.findByTenantIdAndDeviceCode(tenant.tenantId(), deviceCode).orElseThrow();
-        kioskDeviceRepository.save(device.recordAuthentication(clock.instant().minus(Duration.ofDays(24))));
-
-        var agingResponse = mockMvc.perform(get("/api/v1/employees").cookie(kioskCookie))
-                .andExpect(status().isUnauthorized())
-                .andReturn();
-        Cookie refreshedCookie = agingResponse.getResponse().getCookie(KIOSK_COOKIE_NAME);
-        assertThat(refreshedCookie).isNotNull();
-        assertThat(refreshedCookie.getMaxAge()).isEqualTo((int) Duration.ofDays(30).toSeconds());
+        for (int attempt = 0; attempt < 3; attempt++) {
+            var response = mockMvc.perform(get("/api/v1/employees").cookie(kioskCookie))
+                    .andExpect(status().isUnauthorized())
+                    .andReturn();
+            assertThat(response.getResponse().getCookie(KIOSK_COOKIE_NAME)).isNull();
+        }
     }
 }

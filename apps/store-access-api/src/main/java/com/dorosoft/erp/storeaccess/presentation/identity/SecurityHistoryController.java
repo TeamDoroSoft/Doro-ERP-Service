@@ -1,6 +1,7 @@
 package com.dorosoft.erp.storeaccess.presentation.identity;
 
 import com.dorosoft.erp.storeaccess.application.api.identity.SecurityHistoryEntry;
+import com.dorosoft.erp.storeaccess.application.api.identity.SecurityHistoryPage;
 import com.dorosoft.erp.storeaccess.application.api.identity.SecurityHistoryQueryService;
 import com.dorosoft.erp.storeaccess.application.api.identity.UserActivity;
 import com.dorosoft.erp.storeaccess.application.port.identity.CurrentActorResolver;
@@ -46,15 +47,14 @@ class SecurityHistoryController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant cursorOccurredAt,
             @RequestParam(required = false) UUID cursorId,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
-        List<SecurityHistoryEntry> entries = securityHistoryQueryService.searchForController(
+        SecurityHistoryPage page = securityHistoryQueryService.searchForController(
                 currentActorResolver.currentActor(), from, to, eventType, targetType, targetId, result,
                 cursorOccurredAt, cursorId, size);
+        List<SecurityHistoryEntry> entries = page.items();
         List<SecurityHistoryEntryResponse> items = entries.stream().map(this::toResponse).toList();
         SecurityHistoryEntry last = entries.isEmpty() ? null : entries.get(entries.size() - 1);
-        int requestedSize = size == null ? 50 : size;
-        boolean hasMore = entries.size() >= requestedSize;
         return ResponseEntity.ok(new SecurityHistoryPageResponse(
-                items, last == null ? null : last.occurredAt(), last == null ? null : last.id(), hasMore));
+                items, last == null ? null : last.occurredAt(), last == null ? null : last.id(), page.hasMore()));
     }
 
     private SecurityHistoryEntryResponse toResponse(SecurityHistoryEntry entry) {

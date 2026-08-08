@@ -80,7 +80,7 @@ class SecurityHistoryQueryServiceIntegrationTest {
     }
 
     @Test
-    void managerSeesOnlySelfActionsStaffTargetsAndKioskRecords() {
+    void managerSeesOnlySelfTargetedStaffTargetedAndKioskRecords() {
         UUID tenantId = UUID.randomUUID();
         UUID storeId = UUID.randomUUID();
         EmployeeAccount owner = createAndSaveEmployee(tenantId, storeId, Role.OWNER);
@@ -88,23 +88,28 @@ class SecurityHistoryQueryServiceIntegrationTest {
         EmployeeAccount otherManager = createAndSaveEmployee(tenantId, storeId, Role.MANAGER);
         EmployeeAccount staff = createAndSaveEmployee(tenantId, storeId, Role.STAFF);
 
-        // Visible to `manager`: they are the actor.
-        EmployeeSecurityHistory managerIsActor = saveHistory(
-                tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_CREATED, manager.id(), "EMPLOYEE", staff.id(), now());
+        // Visible to `manager`: they are the target — their own account history — regardless of actor.
+        EmployeeSecurityHistory managerIsTarget = saveHistory(
+                tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_REAUTHENTICATION_FAILED, manager.id(), "EMPLOYEE",
+                manager.id(), now());
         // Visible to `manager`: the target is a STAFF employee, regardless of actor.
         EmployeeSecurityHistory targetIsStaff = saveHistory(
                 tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_STATUS_CHANGED, owner.id(), "EMPLOYEE", staff.id(), now());
         // Visible to `manager`: the target is a Kiosk device, regardless of actor.
         EmployeeSecurityHistory targetIsKiosk = saveHistory(
                 tenantId, storeId, SecurityHistoryEventType.KIOSK_DEVICE_REGISTERED, owner.id(), "KIOSK_DEVICE", UUID.randomUUID(), now());
-        // Not visible to `manager`: another MANAGER acted on and targets another MANAGER.
+        // Not visible to `manager`: they are the actor, but the target is another MANAGER — being the actor
+        // does not by itself grant visibility (ADR-02-015).
         saveHistory(
-                tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_ROLE_CHANGED, owner.id(), "EMPLOYEE", otherManager.id(), now());
+                tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_ROLE_CHANGED, manager.id(), "EMPLOYEE", otherManager.id(), now());
+        // Not visible to `manager`: the target is the OWNER.
+        saveHistory(
+                tenantId, storeId, SecurityHistoryEventType.EMPLOYEE_ROLE_CHANGED, owner.id(), "EMPLOYEE", owner.id(), now());
 
         List<EmployeeSecurityHistory> results = service.search(actorFor(manager), wideRangeRequest(null));
 
         assertThat(results).extracting(EmployeeSecurityHistory::id).containsExactlyInAnyOrder(
-                managerIsActor.id(), targetIsStaff.id(), targetIsKiosk.id());
+                managerIsTarget.id(), targetIsStaff.id(), targetIsKiosk.id());
     }
 
     @Test

@@ -1,0 +1,17 @@
+package com.dorosoft.erp.storeaccess.domain.identity;
+
+/** Allowlisted {@code employee_security_history} event types (ADR-02-015). */
+public enum SecurityHistoryEventType {
+    EMPLOYEE_LOGIN_FAILED,
+    EMPLOYEE_ACCOUNT_LOCKED,
+    EMPLOYEE_REAUTHENTICATION_FAILED,
+    EMPLOYEE_SESSION_INVALIDATED,
+    EMPLOYEE_CREATED,
+    EMPLOYEE_ROLE_CHANGED,
+    EMPLOYEE_STATUS_CHANGED,
+    EMPLOYEE_PASSWORD_CHANGED,
+    EMPLOYEE_PASSWORD_RESET,
+    KIOSK_DEVICE_REGISTERED,
+    KIOSK_CREDENTIAL_ROTATED,
+    KIOSK_DEVICE_REVOKED
+}

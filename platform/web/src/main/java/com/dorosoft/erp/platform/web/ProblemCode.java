@@ -21,6 +21,11 @@ public interface ProblemCode {
         return URI.create("urn:doro-erp:problem:" + code().toLowerCase(Locale.ROOT).replace('_', '-'));
     }
 
+    /** Non-null to add a {@code Retry-After} header (seconds) to the HTTP response for this code. */
+    default Integer retryAfterSeconds() {
+        return null;
+    }
+
     default ProblemDetail toProblemDetail(
             String requestId,
             List<ProblemFieldError> fieldErrors,

@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -142,6 +143,28 @@ class IdempotencyServiceIntegrationTest {
                     throw new IllegalStateException("business logic failed");
                 }))
                 .isInstanceOf(IllegalStateException.class);
+
+        String keyDigest = digestSigner.digestKey(key);
+        assertThat(idempotencyRecordRepository.findByScope(tenantId, actorId, OPERATION, keyDigest)).isEmpty();
+
+        String retried = idempotencyService.execute(
+                tenantId, actorId, OPERATION, key, "payload", Function.identity(), Function.identity(),
+                () -> "succeeded-on-retry");
+        assertThat(retried).isEqualTo("succeeded-on-retry");
+    }
+
+    @Test
+    void businessConstraintViolationInOperationLogicIsNotMisreportedAsIdempotencyConflict() {
+        UUID tenantId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        String key = UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> idempotencyService.execute(
+                tenantId, actorId, OPERATION, key, "payload", Function.identity(), Function.identity(),
+                () -> {
+                    throw new DataIntegrityViolationException("simulated unrelated business Constraint violation");
+                }))
+                .isExactlyInstanceOf(DataIntegrityViolationException.class);
 
         String keyDigest = digestSigner.digestKey(key);
         assertThat(idempotencyRecordRepository.findByScope(tenantId, actorId, OPERATION, keyDigest)).isEmpty();

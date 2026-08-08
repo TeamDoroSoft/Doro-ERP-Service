@@ -8,7 +8,6 @@ import com.dorosoft.erp.storeaccess.domain.identity.IdempotencyRecordStatus;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
@@ -77,12 +76,18 @@ public class IdempotencyService {
             return requiresNewTransaction.execute(status -> claimAndRun(
                     tenantId, actorEmployeeId, operation, keyDigest, requestHmac, serializer, operationLogic));
         } catch (DataIntegrityViolationException e) {
-            IdempotencyRecord raced = requiresNewTransaction
-                    .execute(status -> idempotencyRecordRepository.findByScope(tenantId, actorEmployeeId, operation, keyDigest))
-                    .orElseThrow(() -> new ProblemAwareException(
-                            IdempotencyProblemCode.IDEMPOTENCY_REQUEST_IN_PROGRESS,
-                            "동일한 요청이 이미 처리 중입니다.", List.of(), e));
-            return replayOrReject(raced, requestHmac, deserializer);
+            // The claim insert's unique-Scope conflict is only one possible cause of a constraint violation
+            // here: operationLogic() runs inside the same REQUIRES_NEW Transaction and may itself violate an
+            // unrelated business Constraint (e.g. a duplicate loginId), which also aborts that Transaction
+            // with a DataIntegrityViolationException. Only a genuine Scope race — a Record now present for
+            // this exact Scope — is replayed; anything else is not an Idempotency conflict at all, and the
+            // original exception is rethrown unchanged rather than misreported as IN_PROGRESS.
+            Optional<IdempotencyRecord> raced = requiresNewTransaction.execute(status ->
+                    idempotencyRecordRepository.findByScope(tenantId, actorEmployeeId, operation, keyDigest));
+            if (raced.isEmpty()) {
+                throw e;
+            }
+            return replayOrReject(raced.get(), requestHmac, deserializer);
         }
     }
 

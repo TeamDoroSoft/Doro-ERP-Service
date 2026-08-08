@@ -20,6 +20,8 @@ dependencies {
 
     testImplementation(project(":test-support"))
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-validation-test")
 }
 
 tasks.named<BootBuildImage>("bootBuildImage") {
